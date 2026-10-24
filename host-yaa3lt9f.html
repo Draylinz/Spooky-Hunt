@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex">
 <title>Host Control</title>
-<link href="https://fonts.googleapis.com/css2?family=Creepster&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@700&family=Rubik:wght@400;500;600;700&family=VT323&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
@@ -15,23 +15,24 @@
 <style>
 .hostgrid{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:16px;align-items:start}
 @media (max-width:960px){.hostgrid{grid-template-columns:1fr}}
-.bigclock{font-family:Creepster,cursive;font-size:clamp(56px,12vw,100px);text-align:center;color:var(--green);text-shadow:0 0 18px rgba(125,255,106,.6);line-height:1}
+.bigclock{font-family:VT323,monospace;font-size:clamp(80px,16vw,140px);text-align:center;color:var(--red);line-height:.9;text-shadow:0 0 8px var(--red),0 0 28px var(--redglow),0 0 60px var(--redglow)}
 .btns{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
 .btns button{margin:0}
-.evrow{display:flex;gap:10px;align-items:center;padding:10px;border-radius:12px;background:rgba(255,255,255,.04);margin-bottom:8px}
+.evrow{display:flex;gap:10px;align-items:center;padding:10px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid rgba(177,77,255,.3);margin-bottom:8px}
 .evrow .info{flex:1;min-width:0}.evrow .info b{display:block}
 .evrow button{width:auto;margin:0;padding:8px 14px;font-size:14px}
-.tag{font-size:11px;font-weight:800;padding:2px 8px;border-radius:8px;background:#3a2458;color:#d9c6ff;margin-right:6px;text-transform:uppercase}
-.tag.fired{background:#1f4a1a;color:var(--green)}
+.tag{font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;border:1px solid var(--purple);color:#e2c6ff;margin-right:6px;text-transform:uppercase;letter-spacing:.06em}
+.tag.fired{border-color:var(--green);color:var(--green);text-shadow:0 0 6px var(--green)}
 .inline{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .inline input,.inline select{margin-top:8px}
-h3{margin:0 0 10px}
+h3{margin:0 0 12px;letter-spacing:.08em;text-transform:uppercase;font-size:16px;color:var(--red2);text-shadow:0 0 8px var(--redglow)}
 .chatbox{height:520px;display:flex;flex-direction:column;padding:0;overflow:hidden}
 .chatbox .chatlog{flex:1}
-details summary{cursor:pointer;font-weight:800;color:var(--orange2);margin:6px 0}
+details summary{cursor:pointer;font-weight:600;color:var(--blue);margin:10px 0 4px;text-shadow:0 0 6px var(--blueglow)}
 </style>
 </head>
 <body>
+<canvas id="ash"></canvas><div class="grain"></div>
 <header class="top"><h1 class="spooky">Host Control</h1><div class="small" id="status">Connecting…</div></header>
 <main>
 <div class="hostgrid">
@@ -96,7 +97,7 @@ details summary{cursor:pointer;font-weight:800;color:var(--orange2);margin:6px 0
   </div>
 </div>
 
-<div class="card chatbox">
+<div class="card blue chatbox">
   <div class="chathead"><span>💬 Group Chat (you post as HOST)</span></div>
   <div class="chatlog" id="chatLog"></div>
   <form class="chatform" onsubmit="event.preventDefault();sendChat('🎃 HOST','', $('chatInput').value,'host');$('chatInput').value=''">
@@ -108,6 +109,7 @@ details summary{cursor:pointer;font-weight:800;color:var(--orange2);margin:6px 0
 <div class="toast" id="toast"></div>
 
 <script>
+startAsh("ash");
 let state = null, events = {}, teams = [], tick = null;
 $("mins").value = String(HUNT.defaultMinutes);
 const toast = t => { const el = $("toast"); el.textContent = t; el.classList.add("show"); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("show"), 2500); };

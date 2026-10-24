@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Halloween Scavenger Hunt</title>
-<link href="https://fonts.googleapis.com/css2?family=Creepster&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@700&family=Rubik:wght@400;500;600;700&family=VT323&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
@@ -13,17 +13,17 @@
 <script src="engine.js"></script>
 </head>
 <body>
-<div class="bats" id="bats"></div>
+<canvas id="ash"></canvas><div class="grain"></div>
 
 <header class="top">
   <h1 class="spooky" id="title"></h1>
-  <div class="clock" id="clock">--:--</div>
+  <div class="hdr-right"><button class="mute" id="muteBtn" onclick="toggleMute()" title="Sound on/off">🔊</button><div class="clock" id="clock">--:--</div></div>
 </header>
 
 <main>
   <!-- JOIN -->
   <section id="v-join" class="card narrow hidden">
-    <h2 class="spooky center" style="font-size:34px;margin:0;color:var(--orange)">Enter if you dare…</h2>
+    <h2 class="spooky center" style="font-size:26px;margin:0 0 6px;">Enter if you dare…</h2>
     <input id="playerName" maxlength="24" placeholder="Your name" autocomplete="given-name">
     <div class="tabs">
       <button class="tab active" id="tCreate" onclick="joinMode('create')">🎃 New team</button>
@@ -39,15 +39,15 @@
   <section id="v-game" class="layout hidden">
     <div>
       <div class="card hidden" id="waitingCard">
-        <h2 class="spooky center" style="font-size:32px;margin:0;color:var(--orange2)">⏳ Waiting for the host…</h2>
+        <h2 class="spooky center" style="font-size:24px;margin:0;">⏳ Waiting for the host…</h2>
         <p class="center">You're <b id="wName"></b> on team <b id="wTeam"></b>.</p>
         <p class="center small">Say hi in the chat 💬 while you wait. · <a class="link" onclick="leave()">Switch team</a></p>
       </div>
 
       <div class="card hidden" id="playCard">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-          <h2 class="spooky" id="teamLabel" style="margin:0;color:var(--orange2);font-size:30px"></h2>
-          <div style="font-weight:800;font-size:22px"><span id="myPoints">0</span> pts</div>
+          <h2 class="spooky" id="teamLabel" style="margin:0;font-size:24px"></h2>
+          <div><span id="myPoints" class="score-big">0</span> <span class="small">PTS</span></div>
         </div>
         <div class="small" style="margin-top:8px"><b id="decorCount">0</b>/<span id="unlockN"></span> decorations to unlock Social</div>
         <div class="progress"><div class="fill" id="decorFill"></div></div>
@@ -57,15 +57,15 @@
         <p class="small center" style="margin-top:18px">Playing as <b id="pName"></b> · <a class="link" onclick="leave()">Switch team</a></p>
       </div>
     </div>
-    <aside class="card">
-      <h3 class="spooky" style="margin:0 0 10px;color:var(--orange);font-size:28px">🏆 Live Scores</h3>
+    <aside class="card blue">
+      <h3 class="spooky" style="margin:0 0 12px;font-size:20px">🏆 Live Scores</h3>
       <div id="board"><div class="small">No teams yet…</div></div>
     </aside>
   </section>
 
   <!-- RESULTS -->
   <section id="v-results" class="card hidden" style="max-width:720px;margin:20px auto;text-align:center">
-    <h2 class="spooky" style="font-size:30px;margin:0;color:var(--muted)">The hunt is over!</h2>
+    <h2 class="spooky" style="font-size:22px;margin:0;">The hunt is over!</h2>
     <div class="winner" id="winner"></div>
     <div id="finalBoard" style="text-align:left"></div>
     <button onclick="openGallery()">🦇 View the Gallery</button>
@@ -74,7 +74,7 @@
   <!-- GALLERY -->
   <section id="v-gallery" class="hidden">
     <div class="card center">
-      <h2 class="spooky" style="font-size:36px;margin:0;color:var(--orange)">All Submissions</h2>
+      <h2 class="spooky" style="font-size:28px;margin:0 0 8px;">All Submissions</h2>
       <div class="filters">
         <select id="fTeam" onchange="renderGallery()"></select>
         <select id="fCat" onchange="renderGallery()"></select>
@@ -104,13 +104,14 @@
 /* ---------- state ---------- */
 let me = { name: store.get("name"), teamId: store.get("teamId"), team: store.get("team") };
 let state = null, myTeam = null, teams = [], events = {}, myThumbs = {}, gallery = [];
-let tab = CATEGORIES[0].key, tick = null, endedOnce = false;
+let tab = CATEGORIES[0].key, tick = null, endedOnce = false, lastLeft = null;
 let unsubTeam, unsubThumbs;
 
 document.title = HUNT.title; $("title").textContent = HUNT.title; $("unlockN").textContent = HUNT.unlockSocialAt;
-for (let i = 0; i < 7; i++) { const b = document.createElement("div"); b.className = "bat"; b.textContent = "🦇";
-  Object.assign(b.style, { top: 5 + Math.random() * 60 + "vh", animationDuration: 14 + Math.random() * 16 + "s", animationDelay: -Math.random() * 25 + "s", fontSize: 16 + Math.random() * 20 + "px" });
-  $("bats").appendChild(b); }
+startAsh("ash");
+function toggleMute() { SOUND.setMuted(!SOUND.muted); $("muteBtn").textContent = SOUND.muted ? "🔇" : "🔊"; if (!SOUND.muted) SOUND.tap(); }
+$("muteBtn").textContent = SOUND.muted ? "🔇" : "🔊";
+function deny(msg) { SOUND.error(); toast(msg); }
 
 const VIEWS = ["join", "game", "results", "gallery"];
 function show(v) { VIEWS.forEach(x => $("v-" + x).classList.toggle("hidden", x !== v)); }
@@ -119,7 +120,7 @@ function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add(
 /* ---------- joining ---------- */
 let mode = "create";
 function joinMode(m) {
-  mode = m; $("tCreate").classList.toggle("active", m === "create"); $("tJoin").classList.toggle("active", m === "join");
+  SOUND.tap(); mode = m; $("tCreate").classList.toggle("active", m === "create"); $("tJoin").classList.toggle("active", m === "join");
   $("mCreate").classList.toggle("hidden", m !== "create"); $("mJoin").classList.toggle("hidden", m !== "join");
   if (m === "join") loadTeams();
 }
@@ -132,12 +133,12 @@ async function loadTeams() {
 }
 async function doJoin() {
   const name = $("playerName").value.trim(); $("joinErr").textContent = "";
-  if (!name) return $("joinErr").textContent = "Enter your name first.";
+  if (!name) { SOUND.error(); return $("joinErr").textContent = "Enter your name first."; }
   try {
     let id, tname;
     if (mode === "create") {
       tname = $("newTeamName").value.trim(); id = slug(tname);
-      if (!id) return $("joinErr").textContent = "Give your team a name.";
+      if (!id) { SOUND.error(); return $("joinErr").textContent = "Give your team a name."; }
       const ref = db.collection(COL.teams).doc(id), snap = await ref.get();
       if (snap.exists) { if (!confirm(`"${snap.data().name}" already exists. Join it?`)) return; tname = snap.data().name; }
       else await ref.set({ name: tname, points: 0, done: [], decorCount: 0, createdAt: FV.serverTimestamp() });
@@ -146,6 +147,7 @@ async function doJoin() {
     }
     me = { name, teamId: id, team: tname };
     store.set("name", name); store.set("teamId", id); store.set("team", tname);
+    SOUND.join();
     sendChat("👻", "", `${name} joined ${tname}`, "feed");
     enter();
   } catch (e) { $("joinErr").textContent = "Couldn't join: " + e.message; }
@@ -191,7 +193,7 @@ function renderTabs() {
   const all = [...(bonuses.length ? [{ key: "bonus", title: "⚡ Bonus" }] : []), ...CATEGORIES];
   $("tabs").innerHTML = all.map(c => `<button class="tab ${c.key === "bonus" && live ? "bonus" : ""} ${c.key === tab ? "active" : ""}" onclick="setTab('${c.key}')">${c.title}</button>`).join("");
 }
-function setTab(k) { tab = k; renderItems(); }
+function setTab(k) { SOUND.tap(); tab = k; renderItems(); }
 
 function itemCard(id, name, pts, opts = {}) {
   const done = (myTeam?.done || []).includes(id);
@@ -247,10 +249,10 @@ async function onPick(input) {
   const file = input.files[0]; input.value = "";
   const id = input.closest(".item").dataset.id, item = getItem(id);
   if (!file || !item || !me.teamId) return;
-  if (phase(state) !== "running") return toast("The hunt isn't running right now.");
-  if (item.cat === "social" && !unlocked()) return toast(`🔒 Find ${HUNT.unlockSocialAt} decorations first.`);
-  if (item.cat === "bonus" && item.ev.expiresAtMs < Date.now()) return toast("⏰ That bonus has expired.");
-  if (file.size > HUNT.maxFileMB * 1048576) return toast(`File is over ${HUNT.maxFileMB} MB — try a shorter clip.`);
+  if (phase(state) !== "running") return deny("The hunt isn't running right now.");
+  if (item.cat === "social" && !unlocked()) return deny(`🔒 Find ${HUNT.unlockSocialAt} decorations first.`);
+  if (item.cat === "bonus" && item.ev.expiresAtMs < Date.now()) return deny("⏰ That bonus has expired.");
+  if (file.size > HUNT.maxFileMB * 1048576) return deny(`File is over ${HUNT.maxFileMB} MB — try a shorter clip.`);
 
   const contentType = file.type || (/\.(mov|mp4|webm)$/i.test(file.name) ? "video/mp4" : "image/jpeg");
   const path = `uploads/${me.teamId}/${id.replace(":", "_")}_${Date.now()}.${extFor(file)}`;
@@ -288,9 +290,9 @@ async function onPick(input) {
       category: item.cat, path, url, contentType, createdAt: FV.serverTimestamp() });
     if (awarded) sendChat("", "", firstClaim ? `⚡ ${me.team} claimed the bonus "${item.name}" (+${awarded})!`
       : `${item.cat === "bonus" ? "⚡" : "🎃"} ${me.team} completed: ${item.name} (+${awarded})`, "feed");
-    SFX.score();
+    if (awarded) SOUND.score(awarded >= 3 || item.cat === "bonus"); else SOUND.chat();
     toast(awarded ? `🎃 +${awarded} for ${me.team}!` : "📸 Added to the gallery (no extra points).");
-  } catch (e) { console.error(e); toast("Upload failed: " + (e.code || e.message)); }
+  } catch (e) { console.error(e); deny("Upload failed: " + (e.code || e.message)); }
   finally { busy.delete(id); renderItems(); }
 }
 
@@ -319,14 +321,14 @@ db.collection(COL.events).orderBy("firedAtMs").onSnapshot(s => {
 function nextPopup() {
   if ($("popup").innerHTML || !popQueue.length) return;
   const e = popQueue.shift();
-  SFX.event(); if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+  SOUND.event(e.type === "points" && /-/.test(e.result || "") ? "penalty" : e.type); flickerScreen(); if (navigator.vibrate) navigator.vibrate([300, 80, 120, 80, 400]);
   $("popup").innerHTML = `<div class="overlay" onclick="if(event.target===this)closePopup()"><div class="eventbox">
     <h2 class="spooky">${esc(e.title)}</h2>${e.text ? `<p>${esc(e.text)}</p>` : ""}
     ${e.task ? `<p class="task">${esc(e.task)}<br><small>${e.pts} pts · ${Math.round((e.expiresAtMs - e.firedAtMs) / 60000)} min${e.firstOnly ? " · first team only!" : ""}</small></p>` : ""}
     ${e.result ? `<p class="result">${esc(e.result)}</p>` : ""}
     <button onclick="closePopup(${e.type === "bonus"})">${e.type === "bonus" ? "⚡ Go!" : "Got it"}</button></div></div>`;
 }
-function closePopup(goBonus) { $("popup").innerHTML = ""; if (goBonus && myTeam) { tab = "bonus"; renderItems(); } nextPopup(); }
+function closePopup(goBonus) { SOUND.tap(); $("popup").innerHTML = ""; if (goBonus && myTeam) { tab = "bonus"; renderItems(); } nextPopup(); }
 startAutoEvents(() => state, () => new Set(Object.keys(events)));
 
 /* ---------- chat ---------- */
@@ -359,7 +361,7 @@ function render() {
 
   if (ph === "ended") {
     $("clock").textContent = "00:00";
-    if (!endedOnce) { endedOnce = true; if (state) SFX.end(); }
+    if (!endedOnce) { endedOnce = true; popQueue.length = 0; $("popup").innerHTML = ""; if (state) { SFX.end(); flickerScreen(); } }
     if ($("v-gallery").classList.contains("hidden")) show("results");
     renderResults(); return;
   }
@@ -372,6 +374,11 @@ function render() {
   }
   const step = () => {
     const left = secondsLeft(state);
+    if (ph === "running" && left !== lastLeft) {
+      if (left <= 10 && left > 0) SOUND.tick(left <= 3);
+      if (left === 300 && lastLeft === 301) { SOUND.warning(); toast("⚠️ 5 minutes left!"); }
+      lastLeft = left;
+    }
     $("clock").textContent = fmt(left);
     $("clock").classList.toggle("low", ph === "running" && left <= 300);
     if (ph === "running" && left <= 0) render();
