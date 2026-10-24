@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Host Control</title>
+<link href="https://fonts.googleapis.com/css2?family=Creepster&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+<script src="config.js"></script>
+<script src="engine.js"></script>
+<style>
+.hostgrid{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:16px;align-items:start}
+@media (max-width:960px){.hostgrid{grid-template-columns:1fr}}
+.bigclock{font-family:Creepster,cursive;font-size:clamp(56px,12vw,100px);text-align:center;color:var(--green);text-shadow:0 0 18px rgba(125,255,106,.6);line-height:1}
+.btns{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.btns button{margin:0}
+.evrow{display:flex;gap:10px;align-items:center;padding:10px;border-radius:12px;background:rgba(255,255,255,.04);margin-bottom:8px}
+.evrow .info{flex:1;min-width:0}.evrow .info b{display:block}
+.evrow button{width:auto;margin:0;padding:8px 14px;font-size:14px}
+.tag{font-size:11px;font-weight:800;padding:2px 8px;border-radius:8px;background:#3a2458;color:#d9c6ff;margin-right:6px;text-transform:uppercase}
+.tag.fired{background:#1f4a1a;color:var(--green)}
+.inline{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.inline input,.inline select{margin-top:8px}
+h3{margin:0 0 10px}
+.chatbox{height:520px;display:flex;flex-direction:column;padding:0;overflow:hidden}
+.chatbox .chatlog{flex:1}
+details summary{cursor:pointer;font-weight:800;color:var(--orange2);margin:6px 0}
+</style>
+</head>
+<body>
+<header class="top"><h1 class="spooky">Host Control</h1><div class="small" id="status">Connecting…</div></header>
+<main>
+<div class="hostgrid">
+<div>
+  <div class="card">
+    <div class="bigclock" id="clock">--:--</div>
+    <label class="small">Hunt length</label>
+    <select id="mins">
+      <option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60">1 hour</option>
+      <option value="90">1.5 hours</option><option value="120">2 hours</option><option value="2">2 minutes (test)</option>
+    </select>
+    <div class="btns" style="margin-top:12px">
+      <button id="startBtn">▶ Start Hunt</button>
+      <button id="endBtn" class="purple">⏹ End Now</button>
+      <button id="waitBtn" class="ghost">↺ Back to Waiting</button>
+    </div>
+    <p class="small">Start gives every scheduled event a new random time. “Back to Waiting” keeps teams, points and photos.</p>
+  </div>
+
+  <div class="card">
+    <h3>⚡ Live Events</h3>
+    <div id="evList"></div>
+
+    <details>
+      <summary>📣 Send a custom pop-up</summary>
+      <input id="cTitle" placeholder="Title (e.g. 🍬 Candy check!)">
+      <input id="cText" placeholder="Message">
+      <button id="cSend">Pop it up on every phone</button>
+    </details>
+    <details>
+      <summary>🎯 Create a bonus task now</summary>
+      <input id="bTask" placeholder="Task (e.g. Photo with a real black cat)">
+      <div class="inline">
+        <input id="bPts" type="number" value="3" min="1" max="50" placeholder="Points">
+        <input id="bMin" type="number" value="5" min="1" max="60" placeholder="Minutes">
+      </div>
+      <label class="small"><input type="checkbox" id="bFirst" style="width:auto;margin-right:6px">First team only</label>
+      <button id="bSend">Launch bonus</button>
+    </details>
+    <details>
+      <summary>➕➖ Adjust a team's points</summary>
+      <div class="inline">
+        <select id="aTeam"></select>
+        <input id="aPts" type="number" value="1" placeholder="+/- points">
+      </div>
+      <input id="aWhy" placeholder="Reason (shown to everyone)">
+      <button id="aSend">Apply</button>
+    </details>
+  </div>
+
+  <div class="card">
+    <h3>🏆 Teams <span class="small" id="upCount"></span></h3>
+    <div id="teams"><div class="small">No teams yet.</div></div>
+    <p class="small">Player page: <a class="link" href="./" target="_blank">open</a></p>
+  </div>
+
+  <div class="card">
+    <h3 style="color:#ff8f8f">Danger zone</h3>
+    <button id="wipeBtn" class="danger">🗑 Wipe Everything for a New Game</button>
+    <p class="small">Deletes teams, points, chat, events, the gallery <b>and</b> all uploaded photos/videos. Save anything you want to keep first.</p>
+    <div id="log" class="small" style="color:var(--orange2)"></div>
+  </div>
+</div>
+
+<div class="card chatbox">
+  <div class="chathead"><span>💬 Group Chat (you post as HOST)</span></div>
+  <div class="chatlog" id="chatLog"></div>
+  <form class="chatform" onsubmit="event.preventDefault();sendChat('🎃 HOST','', $('chatInput').value,'host');$('chatInput').value=''">
+    <input id="chatInput" maxlength="500" placeholder="Message everyone…" autocomplete="off"><button>Send</button>
+  </form>
+</div>
+</div>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+let state = null, events = {}, teams = [], tick = null;
+$("mins").value = String(HUNT.defaultMinutes);
+const toast = t => { const el = $("toast"); el.textContent = t; el.classList.add("show"); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("show"), 2500); };
+const fire = def => fireEvent(def).then(ok => toast(ok ? "Fired: " + (def.title || def.task) : "Already fired")).catch(e => toast("Error: " + e.message));
+
+async function clearCol(name) {
+  for (;;) { const s = await db.collection(name).limit(400).get(); if (s.empty) return;
+    const b = db.batch(); s.forEach(d => b.delete(d.ref)); await b.commit(); }
+}
+
+/* clock controls */
+$("startBtn").onclick = async () => {
+  if (phase(state) === "running" && !confirm("A hunt is running. Restart the clock?")) return;
+  const duration = Number($("mins").value) * 60;
+  await clearCol(COL.events);  // so scheduled events can fire again
+  await stateRef.set({ status: "running", startTime: FV.serverTimestamp(), duration, schedule: makeSchedule(duration) });
+  sendChat("🎃 HOST", "", "🟢 The hunt has begun! Good luck!", "host");
+};
+$("endBtn").onclick = async () => { if (confirm("End the hunt for everyone now?")) await stateRef.set({ status: "ended" }, { merge: true }); };
+$("waitBtn").onclick = () => stateRef.set({ status: "waiting", startTime: null, duration: Number($("mins").value) * 60, schedule: null });
+
+stateRef.onSnapshot(d => {
+  state = d.exists ? d.data({ serverTimestamps: "estimate" }) : { status: "waiting" };
+  clearInterval(tick);
+  const draw = () => {
+    const ph = phase(state);
+    $("status").textContent = { running: "🟢 LIVE", ended: "🔴 Ended", waiting: "🟡 Waiting" }[ph] || ph;
+    $("clock").textContent = ph === "ended" ? "00:00" : fmt(secondsLeft(state));
+    renderEvents();
+  };
+  draw(); if (phase(state) === "running") tick = setInterval(draw, 1000);
+}, e => { $("status").textContent = "⚠️ " + e.code; });
+
+/* events */
+db.collection(COL.events).onSnapshot(s => { events = Object.fromEntries(s.docs.map(d => [d.id, d.data()])); renderEvents(); });
+function renderEvents() {
+  const sched = state?.schedule || {}, el = elapsedSec(state), running = phase(state) === "running";
+  const fixed = EVENTS.map(e => {
+    const f = events[e.id], at = sched[e.id];
+    const when = f ? `<span class="tag fired">fired</span>${esc(f.result || "")}`
+      : at != null && running ? `<span class="tag">in ${fmt(Math.max(0, at - el))}</span>at ${fmt(at)} into the hunt`
+      : `<span class="tag">${e.type}</span>window ${Math.round(e.window[0] * 100)}–${Math.round(e.window[1] * 100)}%`;
+    return `<div class="evrow"><div class="info"><b>${esc(e.title)}</b><span class="small">${when}</span></div>
+      <button class="purple" ${f ? "disabled" : ""} onclick="fire(EVENT_DEFS['${e.id}'])">Fire now</button></div>`;
+  }).join("");
+  const custom = Object.entries(events).filter(([id]) => !EVENT_DEFS[id]).sort((a, b) => a[1].firedAtMs - b[1].firedAtMs)
+    .map(([, e]) => `<div class="evrow"><div class="info"><b>${esc(e.title || e.task)}</b><span class="small"><span class="tag fired">custom</span>${esc(e.result || e.text || "")}</span></div></div>`).join("");
+  $("evList").innerHTML = fixed + custom;
+}
+$("cSend").onclick = () => {
+  const title = $("cTitle").value.trim(), text = $("cText").value.trim(); if (!title && !text) return;
+  fire({ id: "custom-" + Date.now(), type: "message", title: title || "📣 Announcement", text }); $("cTitle").value = $("cText").value = "";
+};
+$("bSend").onclick = () => {
+  const task = $("bTask").value.trim(); if (!task) return;
+  fire({ id: "custom-" + Date.now(), type: "bonus", title: "⚡ BONUS TASK", text: $("bFirst").checked ? "First team to do it wins the points!" : "Every team can earn this one!",
+    task, pts: +$("bPts").value || 3, minutes: +$("bMin").value || 5, firstOnly: $("bFirst").checked });
+  $("bTask").value = "";
+};
+$("aSend").onclick = () => {
+  const id = $("aTeam").value, pts = parseInt($("aPts").value, 10); if (!id || !pts) return;
+  const name = teams.find(t => t.id === id)?.name || id;
+  fire({ id: "custom-" + Date.now(), type: "points", target: "team:" + id, pts,
+    title: pts > 0 ? `🎁 Points for ${name}!` : `💀 ${name} loses points`, text: $("aWhy").value.trim() });
+  $("aWhy").value = "";
+};
+
+/* teams */
+db.collection(COL.teams).orderBy("points", "desc").onSnapshot(s => {
+  teams = s.docs.map(d => ({ id: d.id, ...d.data() }));
+  $("teams").innerHTML = teams.map((t, i) => `<div class="row"><span class="rk">#${i + 1}</span><span class="nm">${esc(t.name)} <span class="small">· ${t.decorCount || 0} decor · ${(t.done || []).length} items</span></span><span class="pt">${t.points || 0}</span></div>`).join("") || `<div class="small">No teams yet.</div>`;
+  const cur = $("aTeam").value;
+  $("aTeam").innerHTML = teams.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join(""); if (cur) $("aTeam").value = cur;
+});
+db.collection(COL.uploads).onSnapshot(s => $("upCount").textContent = `· ${s.size} uploads`);
+
+/* chat */
+listenChat(msgs => { const log = $("chatLog"); log.innerHTML = msgs.map(m => chatHTML(m, { name: "🎃 HOST", team: "" })).join(""); log.scrollTop = 1e9; });
+
+startAutoEvents(() => state, () => new Set(Object.keys(events)));
+
+/* wipe */
+async function deleteFolder(ref) {
+  const r = await ref.listAll();
+  await Promise.all(r.items.map(i => i.delete().catch(() => {})));
+  for (const p of r.prefixes) await deleteFolder(p);
+}
+$("wipeBtn").onclick = async () => {
+  if (prompt("This deletes EVERYTHING. Type WIPE to confirm.") !== "WIPE") return;
+  try {
+    $("log").textContent = "Deleting photos & videos…"; await deleteFolder(storage.ref("uploads"));
+    $("log").textContent = "Deleting data…";
+    for (const c of [COL.uploads, COL.chat, COL.events, COL.teams]) await clearCol(c);
+    await stateRef.set({ status: "waiting", startTime: null, duration: Number($("mins").value) * 60, schedule: null });
+    $("log").textContent = "✅ Wiped. Ready for a new game.";
+  } catch (e) { $("log").textContent = "Error: " + e.message; }
+};
+</script>
+</body>
+</html>

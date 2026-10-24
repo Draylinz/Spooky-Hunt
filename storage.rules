@@ -1,0 +1,15 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Photos & videos only, up to 200 MB each
+    match /uploads/{allPaths=**} {
+      allow read, delete: if true;
+      allow create: if request.resource.size < 200 * 1024 * 1024
+                    && (request.resource.contentType.matches('image/.*')
+                        || request.resource.contentType.matches('video/.*'));
+    }
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

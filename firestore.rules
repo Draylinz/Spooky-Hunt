@@ -1,0 +1,44 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Hunt clock / schedule
+    match /state/{doc} {
+      allow read, write: if true;
+    }
+
+    // Teams and scores
+    match /teams/{teamId} {
+      allow read, delete: if true;
+      allow create: if request.resource.data.name is string
+                    && request.resource.data.name.size() <= 40
+                    && request.resource.data.points == 0;
+      allow update: if request.resource.data.points is int
+                    && request.resource.data.points >= 0
+                    && request.resource.data.points <= 2000
+                    && request.resource.data.name == resource.data.name;
+    }
+
+    // Gallery entries
+    match /uploads/{id} {
+      allow read, create, delete: if true;
+    }
+
+    // Group chat
+    match /chat/{id} {
+      allow read, delete: if true;
+      allow create: if request.resource.data.text is string
+                    && request.resource.data.text.size() <= 600;
+    }
+
+    // Live events (players may only set a bonus's "claimedBy")
+    match /events/{id} {
+      allow read, create, delete: if true;
+      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['claimedBy']);
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

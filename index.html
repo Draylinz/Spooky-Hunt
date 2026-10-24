@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Halloween Scavenger Hunt</title>
+<link href="https://fonts.googleapis.com/css2?family=Creepster&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+<script src="config.js"></script>
+<script src="engine.js"></script>
+</head>
+<body>
+<div class="bats" id="bats"></div>
+
+<header class="top">
+  <h1 class="spooky" id="title"></h1>
+  <div class="clock" id="clock">--:--</div>
+</header>
+
+<main>
+  <!-- JOIN -->
+  <section id="v-join" class="card narrow hidden">
+    <h2 class="spooky center" style="font-size:34px;margin:0;color:var(--orange)">Enter if you dare…</h2>
+    <input id="playerName" maxlength="24" placeholder="Your name" autocomplete="given-name">
+    <div class="tabs">
+      <button class="tab active" id="tCreate" onclick="joinMode('create')">🎃 New team</button>
+      <button class="tab" id="tJoin" onclick="joinMode('join')">👻 Join a team</button>
+    </div>
+    <div id="mCreate"><input id="newTeamName" maxlength="40" placeholder="Team name, e.g. The Boo Crew" autocomplete="off"></div>
+    <div id="mJoin" class="hidden"><select id="teamSelect"></select></div>
+    <button onclick="doJoin()">Let's go</button>
+    <div class="err" id="joinErr"></div>
+  </section>
+
+  <!-- GAME -->
+  <section id="v-game" class="layout hidden">
+    <div>
+      <div class="card hidden" id="waitingCard">
+        <h2 class="spooky center" style="font-size:32px;margin:0;color:var(--orange2)">⏳ Waiting for the host…</h2>
+        <p class="center">You're <b id="wName"></b> on team <b id="wTeam"></b>.</p>
+        <p class="center small">Say hi in the chat 💬 while you wait. · <a class="link" onclick="leave()">Switch team</a></p>
+      </div>
+
+      <div class="card hidden" id="playCard">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <h2 class="spooky" id="teamLabel" style="margin:0;color:var(--orange2);font-size:30px"></h2>
+          <div style="font-weight:800;font-size:22px"><span id="myPoints">0</span> pts</div>
+        </div>
+        <div class="small" style="margin-top:8px"><b id="decorCount">0</b>/<span id="unlockN"></span> decorations to unlock Social</div>
+        <div class="progress"><div class="fill" id="decorFill"></div></div>
+        <div class="tabs" id="tabs"></div>
+        <div class="small" id="catNote" style="margin:8px 2px"></div>
+        <div class="items" id="items"></div>
+        <p class="small center" style="margin-top:18px">Playing as <b id="pName"></b> · <a class="link" onclick="leave()">Switch team</a></p>
+      </div>
+    </div>
+    <aside class="card">
+      <h3 class="spooky" style="margin:0 0 10px;color:var(--orange);font-size:28px">🏆 Live Scores</h3>
+      <div id="board"><div class="small">No teams yet…</div></div>
+    </aside>
+  </section>
+
+  <!-- RESULTS -->
+  <section id="v-results" class="card hidden" style="max-width:720px;margin:20px auto;text-align:center">
+    <h2 class="spooky" style="font-size:30px;margin:0;color:var(--muted)">The hunt is over!</h2>
+    <div class="winner" id="winner"></div>
+    <div id="finalBoard" style="text-align:left"></div>
+    <button onclick="openGallery()">🦇 View the Gallery</button>
+  </section>
+
+  <!-- GALLERY -->
+  <section id="v-gallery" class="hidden">
+    <div class="card center">
+      <h2 class="spooky" style="font-size:36px;margin:0;color:var(--orange)">All Submissions</h2>
+      <div class="filters">
+        <select id="fTeam" onchange="renderGallery()"></select>
+        <select id="fCat" onchange="renderGallery()"></select>
+      </div>
+      <p class="small" id="gCount"></p>
+      <button class="ghost" style="max-width:300px" onclick="show('results')">⬅ Back to results</button>
+    </div>
+    <div class="gallery" id="galleryGrid"></div>
+  </section>
+</main>
+
+<!-- CHAT -->
+<button class="chatbtn hidden" id="chatBtn" onclick="toggleChat()">💬<span class="badge hidden" id="badge">0</span></button>
+<div class="chatpanel hidden" id="chatPanel">
+  <div class="chathead"><span>💬 Group Chat</span><button onclick="toggleChat()">✕</button></div>
+  <div class="chatlog" id="chatLog"></div>
+  <form class="chatform" onsubmit="event.preventDefault();postChat()">
+    <input id="chatInput" maxlength="500" placeholder="Message everyone…" autocomplete="off">
+    <button>Send</button>
+  </form>
+</div>
+
+<div id="popup"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------- state ---------- */
+let me = { name: store.get("name"), teamId: store.get("teamId"), team: store.get("team") };
+let state = null, myTeam = null, teams = [], events = {}, myThumbs = {}, gallery = [];
+let tab = CATEGORIES[0].key, tick = null, endedOnce = false;
+let unsubTeam, unsubThumbs;
+
+document.title = HUNT.title; $("title").textContent = HUNT.title; $("unlockN").textContent = HUNT.unlockSocialAt;
+for (let i = 0; i < 7; i++) { const b = document.createElement("div"); b.className = "bat"; b.textContent = "🦇";
+  Object.assign(b.style, { top: 5 + Math.random() * 60 + "vh", animationDuration: 14 + Math.random() * 16 + "s", animationDelay: -Math.random() * 25 + "s", fontSize: 16 + Math.random() * 20 + "px" });
+  $("bats").appendChild(b); }
+
+const VIEWS = ["join", "game", "results", "gallery"];
+function show(v) { VIEWS.forEach(x => $("v-" + x).classList.toggle("hidden", x !== v)); }
+function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add("show"); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("show"), 2800); }
+
+/* ---------- joining ---------- */
+let mode = "create";
+function joinMode(m) {
+  mode = m; $("tCreate").classList.toggle("active", m === "create"); $("tJoin").classList.toggle("active", m === "join");
+  $("mCreate").classList.toggle("hidden", m !== "create"); $("mJoin").classList.toggle("hidden", m !== "join");
+  if (m === "join") loadTeams();
+}
+async function loadTeams() {
+  const sel = $("teamSelect"); sel.innerHTML = "<option value=''>Loading…</option>";
+  try {
+    const s = await db.collection(COL.teams).orderBy("name").get();
+    sel.innerHTML = s.empty ? "<option value=''>No teams yet — make one!</option>" : s.docs.map(d => `<option value="${d.id}">${esc(d.data().name)}</option>`).join("");
+  } catch (e) { $("joinErr").textContent = "Can't reach the game: " + e.message; }
+}
+async function doJoin() {
+  const name = $("playerName").value.trim(); $("joinErr").textContent = "";
+  if (!name) return $("joinErr").textContent = "Enter your name first.";
+  try {
+    let id, tname;
+    if (mode === "create") {
+      tname = $("newTeamName").value.trim(); id = slug(tname);
+      if (!id) return $("joinErr").textContent = "Give your team a name.";
+      const ref = db.collection(COL.teams).doc(id), snap = await ref.get();
+      if (snap.exists) { if (!confirm(`"${snap.data().name}" already exists. Join it?`)) return; tname = snap.data().name; }
+      else await ref.set({ name: tname, points: 0, done: [], decorCount: 0, createdAt: FV.serverTimestamp() });
+    } else {
+      const sel = $("teamSelect"); id = sel.value; if (!id) return; tname = sel.options[sel.selectedIndex].textContent;
+    }
+    me = { name, teamId: id, team: tname };
+    store.set("name", name); store.set("teamId", id); store.set("team", tname);
+    sendChat("👻", "", `${name} joined ${tname}`, "feed");
+    enter();
+  } catch (e) { $("joinErr").textContent = "Couldn't join: " + e.message; }
+}
+function leave() {
+  if (!confirm("Switch teams? Your current team keeps its points.")) return;
+  unsubTeam?.(); unsubThumbs?.(); me.teamId = me.team = ""; myTeam = null; myThumbs = {};
+  store.set("teamId"); store.set("team"); $("playerName").value = me.name; render();
+}
+
+function enter() {
+  $("wName").textContent = $("pName").textContent = me.name;
+  $("wTeam").textContent = $("teamLabel").textContent = me.team;
+  $("chatBtn").classList.remove("hidden");
+  unsubTeam?.(); unsubThumbs?.();
+  unsubTeam = db.collection(COL.teams).doc(me.teamId).onSnapshot(d => {
+    if (!d.exists) { store.set("teamId"); store.set("team"); me.teamId = ""; toast("Your team was cleared by the host."); render(); return; }
+    myTeam = d.data(); me.team = myTeam.name; updateMine();
+  });
+  unsubThumbs = db.collection(COL.uploads).where("teamId", "==", me.teamId).onSnapshot(s => {
+    myThumbs = {}; s.forEach(d => { const u = d.data(); (myThumbs[u.itemId] ||= []).push(u); }); renderItems();
+  }, () => {});
+  render();
+}
+function updateMine() {
+  $("myPoints").textContent = myTeam.points || 0;
+  const n = myTeam.decorCount || 0;
+  $("decorCount").textContent = n; $("decorFill").style.width = Math.min(n / HUNT.unlockSocialAt * 100, 100) + "%";
+  renderItems();
+}
+
+/* ---------- items ---------- */
+function bonusList() {
+  return Object.entries(events).filter(([, e]) => e.type === "bonus")
+    .map(([id, e]) => ({ id: "bonus:" + id, evId: id, name: e.task, pts: e.pts, cat: "bonus", ev: e }))
+    .sort((a, b) => b.ev.firedAtMs - a.ev.firedAtMs);
+}
+function getItem(id) { return ITEMS[id] || bonusList().find(b => b.id === id); }
+const unlocked = () => (myTeam?.decorCount || 0) >= HUNT.unlockSocialAt;
+
+function renderTabs() {
+  const bonuses = bonusList(), live = bonuses.some(b => b.ev.expiresAtMs > Date.now());
+  const all = [...(bonuses.length ? [{ key: "bonus", title: "⚡ Bonus" }] : []), ...CATEGORIES];
+  $("tabs").innerHTML = all.map(c => `<button class="tab ${c.key === "bonus" && live ? "bonus" : ""} ${c.key === tab ? "active" : ""}" onclick="setTab('${c.key}')">${c.title}</button>`).join("");
+}
+function setTab(k) { tab = k; renderItems(); }
+
+function itemCard(id, name, pts, opts = {}) {
+  const done = (myTeam?.done || []).includes(id);
+  const thumbs = (myThumbs[id] || []).map(u => (u.contentType || "").startsWith("video")
+    ? `<video src="${esc(u.url)}#t=0.1" muted playsinline preload="metadata"></video>` : `<img src="${esc(u.url)}" loading="lazy" alt="">`).join("");
+  const label = opts.closedLabel || (done ? "＋ Add another (no extra pts)" : "📸 Upload photo / video");
+  return `<div class="item ${done ? "done" : ""} ${opts.locked ? "locked" : ""} ${opts.closed ? "expired" : ""} ${opts.cls || ""} ${busy.has(id) ? "busy" : ""}" data-id="${esc(id)}">
+    <div class="pts">${pts} PT${pts > 1 ? "S" : ""}${opts.extra || ""}</div>
+    <div class="name">${esc(name)}</div>
+    ${thumbs ? `<div class="thumbs">${thumbs}</div>` : ""}
+    <label class="up">${label}<input type="file" accept="image/*,video/*" ${opts.locked || opts.closed ? "disabled" : ""} onchange="onPick(this)"></label>
+    <div class="bar"><i></i></div></div>`;
+}
+const busy = new Set();
+
+function renderItems() {
+  if (!myTeam) return;
+  renderTabs();
+  if (tab === "bonus") {
+    const list = bonusList();
+    $("catNote").textContent = "Limited-time tasks from live events. Be quick!";
+    $("items").innerHTML = list.map(b => {
+      const left = Math.max(0, Math.ceil((b.ev.expiresAtMs - Date.now()) / 1000));
+      const claimed = b.ev.firstOnly && b.ev.claimedBy;
+      const closed = !left || (claimed && !(myTeam.done || []).includes(b.id));
+      const extra = claimed ? ` · CLAIMED BY ${esc(b.ev.claimedBy).toUpperCase()}` : !left ? " · EXPIRED" : ` · <span data-exp="${b.ev.expiresAtMs}">${fmt(left)}</span> LEFT${b.ev.firstOnly ? " · FIRST TEAM ONLY" : ""}`;
+      return itemCard(b.id, b.name, b.pts, { cls: "bonusitem", extra, closed, closedLabel: closed ? (claimed ? "Already claimed" : "Time's up") : "" });
+    }).join("") || `<p class="small">No bonus tasks yet.</p>`;
+    return;
+  }
+  const c = CAT[tab]; const locked = c.locked && !unlocked();
+  const doneN = c.items.filter((_, i) => (myTeam.done || []).includes(`${c.key}-${i}`)).length;
+  $("catNote").innerHTML = `${c.pts} pt${c.pts > 1 ? "s" : ""} each · ${doneN}/${c.items.length} done`
+    + (c.key === "social" ? ` · Use <b>${esc(HUNT.hashtag)}</b>, then upload a screenshot of your post` : "")
+    + (locked ? ` · 🔒 Find ${HUNT.unlockSocialAt} decorations to unlock` : "");
+  $("items").innerHTML = c.items.map((n, i) => itemCard(`${c.key}-${i}`, n, c.pts, { locked })).join("");
+}
+// live countdown on bonus cards
+setInterval(() => {
+  let expiredNow = false;
+  document.querySelectorAll("[data-exp]").forEach(el => {
+    const s = Math.max(0, Math.ceil((+el.dataset.exp - Date.now()) / 1000)); el.textContent = fmt(s); if (!s) expiredNow = true;
+  });
+  if (expiredNow) renderItems();
+}, 1000);
+
+/* ---------- uploading ---------- */
+function extFor(f) {
+  const m = f.name.match(/\.([a-z0-9]{2,5})$/i); if (m) return m[1].toLowerCase();
+  return ({ "image/jpeg": "jpg", "image/png": "png", "image/heic": "heic", "video/mp4": "mp4", "video/quicktime": "mov", "video/webm": "webm" })[f.type] || "bin";
+}
+async function onPick(input) {
+  const file = input.files[0]; input.value = "";
+  const id = input.closest(".item").dataset.id, item = getItem(id);
+  if (!file || !item || !me.teamId) return;
+  if (phase(state) !== "running") return toast("The hunt isn't running right now.");
+  if (item.cat === "social" && !unlocked()) return toast(`🔒 Find ${HUNT.unlockSocialAt} decorations first.`);
+  if (item.cat === "bonus" && item.ev.expiresAtMs < Date.now()) return toast("⏰ That bonus has expired.");
+  if (file.size > HUNT.maxFileMB * 1048576) return toast(`File is over ${HUNT.maxFileMB} MB — try a shorter clip.`);
+
+  const contentType = file.type || (/\.(mov|mp4|webm)$/i.test(file.name) ? "video/mp4" : "image/jpeg");
+  const path = `uploads/${me.teamId}/${id.replace(":", "_")}_${Date.now()}.${extFor(file)}`;
+  const ref = storage.ref(path);
+  busy.add(id); renderItems();
+  try {
+    const task = ref.put(file, { contentType });
+    task.on("state_changed", s => { const b = document.querySelector(`.item[data-id="${CSS.escape(id)}"] .bar i`); if (b) b.style.width = s.bytesTransferred / s.totalBytes * 100 + "%"; });
+    await task;
+    const url = await ref.getDownloadURL();
+
+    // Award points safely (once per team per item; first-only bonuses are claimed atomically)
+    const teamRef = db.collection(COL.teams).doc(me.teamId);
+    const evRef = item.cat === "bonus" ? db.collection(COL.events).doc(item.evId) : null;
+    let awarded = 0, firstClaim = false;
+    await db.runTransaction(async tx => {
+      awarded = 0; firstClaim = false;
+      const t = await tx.get(teamRef); const ev = evRef ? await tx.get(evRef) : null;
+      if (!t.exists) throw new Error("Team not found");
+      const d = t.data();
+      if ((d.done || []).includes(id)) return;
+      if (item.cat === "social" && (d.decorCount || 0) < HUNT.unlockSocialAt) return;
+      if (ev) {
+        const e = ev.data();
+        if (Date.now() > e.expiresAtMs + 120000) return;   // 2-min grace for slow uploads
+        if (e.firstOnly && e.claimedBy) return;
+        if (e.firstOnly) { tx.update(evRef, { claimedBy: me.team }); firstClaim = true; }
+      }
+      const upd = { points: FV.increment(item.pts), done: FV.arrayUnion(id) };
+      if (item.cat === "decor") upd.decorCount = FV.increment(1);
+      tx.update(teamRef, upd); awarded = item.pts;
+    });
+
+    await db.collection(COL.uploads).add({ teamId: me.teamId, teamName: me.team, by: me.name, itemId: id, itemName: item.name,
+      category: item.cat, path, url, contentType, createdAt: FV.serverTimestamp() });
+    if (awarded) sendChat("", "", firstClaim ? `⚡ ${me.team} claimed the bonus "${item.name}" (+${awarded})!`
+      : `${item.cat === "bonus" ? "⚡" : "🎃"} ${me.team} completed: ${item.name} (+${awarded})`, "feed");
+    SFX.score();
+    toast(awarded ? `🎃 +${awarded} for ${me.team}!` : "📸 Added to the gallery (no extra points).");
+  } catch (e) { console.error(e); toast("Upload failed: " + (e.code || e.message)); }
+  finally { busy.delete(id); renderItems(); }
+}
+
+/* ---------- scoreboard ---------- */
+let lastPts = {};
+db.collection(COL.teams).orderBy("points", "desc").onSnapshot(s => {
+  teams = s.docs.map(d => ({ id: d.id, ...d.data() }));
+  $("board").innerHTML = teams.map((t, i) => `<div class="row ${t.id === me.teamId ? "me" : ""} ${lastPts[t.id] !== undefined && lastPts[t.id] !== t.points ? "bump" : ""}">
+    <span class="rk">${["🥇", "🥈", "🥉"][i] || "#" + (i + 1)}</span><span class="nm">${esc(t.name)}</span><span class="pt">${t.points || 0}</span></div>`).join("") || `<div class="small">No teams yet…</div>`;
+  lastPts = Object.fromEntries(teams.map(t => [t.id, t.points]));
+  if (phase(state) === "ended") renderResults();
+}, e => { $("board").innerHTML = `<div class="err">Can't reach the game (${esc(e.code)}).</div>`; });
+
+/* ---------- live events ---------- */
+let eventsLoaded = false;
+const popQueue = [];
+db.collection(COL.events).orderBy("firedAtMs").onSnapshot(s => {
+  s.docChanges().forEach(ch => {
+    if (ch.type === "removed") { delete events[ch.doc.id]; return; }
+    events[ch.doc.id] = ch.doc.data();
+    if (ch.type === "added" && eventsLoaded) popQueue.push(ch.doc.data());
+  });
+  eventsLoaded = true;
+  renderItems(); nextPopup();
+});
+function nextPopup() {
+  if ($("popup").innerHTML || !popQueue.length) return;
+  const e = popQueue.shift();
+  SFX.event(); if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+  $("popup").innerHTML = `<div class="overlay" onclick="if(event.target===this)closePopup()"><div class="eventbox">
+    <h2 class="spooky">${esc(e.title)}</h2>${e.text ? `<p>${esc(e.text)}</p>` : ""}
+    ${e.task ? `<p class="task">${esc(e.task)}<br><small>${e.pts} pts · ${Math.round((e.expiresAtMs - e.firedAtMs) / 60000)} min${e.firstOnly ? " · first team only!" : ""}</small></p>` : ""}
+    ${e.result ? `<p class="result">${esc(e.result)}</p>` : ""}
+    <button onclick="closePopup(${e.type === "bonus"})">${e.type === "bonus" ? "⚡ Go!" : "Got it"}</button></div></div>`;
+}
+function closePopup(goBonus) { $("popup").innerHTML = ""; if (goBonus && myTeam) { tab = "bonus"; renderItems(); } nextPopup(); }
+startAutoEvents(() => state, () => new Set(Object.keys(events)));
+
+/* ---------- chat ---------- */
+let chatOpen = false, unread = 0, chatSeen = null;
+function toggleChat() {
+  chatOpen = !chatOpen; $("chatPanel").classList.toggle("hidden", !chatOpen);
+  if (chatOpen) { unread = 0; updBadge(); $("chatLog").scrollTop = 1e9; setTimeout(() => $("chatInput").focus(), 50); }
+}
+function updBadge() { $("badge").textContent = unread; $("badge").classList.toggle("hidden", !unread); }
+function postChat() { const i = $("chatInput"); sendChat(me.name, me.team, i.value); i.value = ""; }
+listenChat(msgs => {
+  const log = $("chatLog"), atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
+  log.innerHTML = msgs.map(m => chatHTML(m, me)).join("");
+  if (atBottom || chatSeen === null) log.scrollTop = 1e9;
+  const fresh = chatSeen === null ? [] : msgs.filter(m => !chatSeen.has(m.id) && !(m.name === me.name && m.team === me.team));
+  chatSeen = new Set(msgs.map(m => m.id));
+  if (fresh.length && !chatOpen) { unread += fresh.length; updBadge(); }
+  if (fresh.some(m => m.kind === "user" || m.kind === "host")) SFX.chat();
+});
+
+/* ---------- hunt state ---------- */
+stateRef.onSnapshot(d => { state = d.exists ? d.data({ serverTimestamps: "estimate" }) : { status: "waiting" }; render(); },
+  e => { $("clock").textContent = "--:--"; });
+
+function render() {
+  clearInterval(tick);
+  const ph = phase(state);
+  $("clock").classList.remove("low");
+  if (me.name) $("chatBtn").classList.remove("hidden");
+
+  if (ph === "ended") {
+    $("clock").textContent = "00:00";
+    if (!endedOnce) { endedOnce = true; if (state) SFX.end(); }
+    if ($("v-gallery").classList.contains("hidden")) show("results");
+    renderResults(); return;
+  }
+  endedOnce = false;
+  if (!me.teamId) { show("join"); if (me.name) $("playerName").value = me.name; }
+  else {
+    show("game");
+    $("waitingCard").classList.toggle("hidden", ph === "running");
+    $("playCard").classList.toggle("hidden", ph !== "running");
+  }
+  const step = () => {
+    const left = secondsLeft(state);
+    $("clock").textContent = fmt(left);
+    $("clock").classList.toggle("low", ph === "running" && left <= 300);
+    if (ph === "running" && left <= 0) render();
+  };
+  step(); if (ph === "running") tick = setInterval(step, 1000);
+}
+
+/* ---------- results + gallery ---------- */
+function renderResults() {
+  const [first, ...rest] = teams;
+  $("winner").textContent = first ? `🏆 ${first.name} — ${first.points || 0} pts` : "No teams played 👻";
+  $("finalBoard").innerHTML = rest.map((t, i) => `<div class="row ${t.id === me.teamId ? "me" : ""}"><span class="rk">#${i + 2}</span><span class="nm">${esc(t.name)}</span><span class="pt">${t.points || 0}</span></div>`).join("");
+}
+async function openGallery() {
+  show("gallery"); $("galleryGrid").innerHTML = `<p class="center small">Summoning photos…</p>`;
+  try {
+    gallery = (await db.collection(COL.uploads).orderBy("createdAt").get()).docs.map(d => d.data());
+    const tm = [...new Map(gallery.map(u => [u.teamId, u.teamName])).entries()];
+    $("fTeam").innerHTML = `<option value="">All teams</option>` + tm.map(([id, n]) => `<option value="${esc(id)}">${esc(n)}</option>`).join("");
+    $("fCat").innerHTML = `<option value="">All categories</option>` + [...CATEGORIES, { key: "bonus", title: "⚡ Bonus" }].map(c => `<option value="${c.key}">${c.title}</option>`).join("");
+    renderGallery();
+  } catch (e) { $("galleryGrid").innerHTML = `<p class="err center">Couldn't load gallery: ${esc(e.message)}</p>`; }
+}
+function renderGallery() {
+  const ft = $("fTeam").value, fc = $("fCat").value;
+  const list = gallery.filter(u => (!ft || u.teamId === ft) && (!fc || u.category === fc));
+  $("gCount").textContent = `${list.length} submission${list.length === 1 ? "" : "s"}`;
+  $("galleryGrid").innerHTML = list.map(u => `<div class="g"><h4>${esc(u.teamName)}${u.by ? ` · ${esc(u.by)}` : ""}<span>${esc(u.itemName)}</span></h4>${
+    (u.contentType || "").startsWith("video") ? `<video src="${esc(u.url)}#t=0.1" controls playsinline preload="metadata"></video>`
+      : `<a href="${esc(u.url)}" target="_blank" rel="noopener"><img src="${esc(u.url)}" loading="lazy" alt=""></a>`}</div>`).join("")
+    || `<p class="center small">Nothing here yet.</p>`;
+}
+
+/* ---------- boot ---------- */
+if (me.teamId) enter(); else { show("join"); if (me.name) { $("playerName").value = me.name; } }
+</script>
+</body>
+</html>
