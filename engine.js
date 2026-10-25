@@ -164,15 +164,15 @@ const SOUND = (() => {
     return ctx;
   }
   const T = () => ctx.currentTime;
-  function out(node, { verb = .3, delay = 0 } = {}) {
-    node.connect(master);
+  function out(node, { verb = .3, delay = 0, bus } = {}) {
+    node.connect(bus || master);
     if (verb) { const g = ctx.createGain(); g.gain.value = verb; node.connect(g).connect(verbIn); }
     if (delay) { const g = ctx.createGain(); g.gain.value = delay; node.connect(g).connect(delayIn); }
   }
   // one synth voice: detuned oscillators -> resonant lowpass with envelope -> amp envelope
   function synth({ f, at = 0, dur = .3, type = "sawtooth", vol = .15, detune = 9, voices = 2, cut = 2400, cutEnd, q = 4,
-                   a = .005, r, glide, verb, delay }) {
-    const t = T() + at, rel = r ?? dur * .8;
+                   a = .005, r, glide, verb, delay, t0, bus }) {
+    const t = (t0 ?? T()) + at, rel = r ?? dur * .8;
     const filt = ctx.createBiquadFilter(); filt.type = "lowpass"; filt.Q.value = q;
     filt.frequency.setValueAtTime(cut, t); if (cutEnd) filt.frequency.exponentialRampToValueAtTime(cutEnd, t + dur);
     const amp = ctx.createGain(); amp.gain.setValueAtTime(0, t); amp.gain.linearRampToValueAtTime(vol, t + a);
@@ -183,24 +183,114 @@ const SOUND = (() => {
       o.detune.value = voices > 1 ? (i - (voices - 1) / 2) * detune * 2 : 0;
       o.connect(filt); o.start(t); o.stop(t + dur + .05);
     }
-    filt.connect(amp); out(amp, { verb, delay });
+    filt.connect(amp); out(amp, { verb, delay, bus });
   }
-  function noise({ at = 0, dur = .5, vol = .2, type = "bandpass", f = 1200, fEnd, q = 1, a = .01, verb = .3 }) {
-    const t = T() + at, len = Math.ceil(ctx.sampleRate * (dur + .1)), buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+  function noise({ at = 0, dur = .5, vol = .2, type = "bandpass", f = 1200, fEnd, q = 1, a = .01, verb = .3, t0, bus }) {
+    const t = (t0 ?? T()) + at, len = Math.ceil(ctx.sampleRate * (dur + .1)), buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
     const src = ctx.createBufferSource(); src.buffer = buf;
     const filt = ctx.createBiquadFilter(); filt.type = type; filt.Q.value = q; filt.frequency.setValueAtTime(f, t);
     if (fEnd) filt.frequency.exponentialRampToValueAtTime(fEnd, t + dur);
     const amp = ctx.createGain(); amp.gain.setValueAtTime(0, t); amp.gain.linearRampToValueAtTime(vol, t + a); amp.gain.exponentialRampToValueAtTime(.0001, t + dur);
-    src.connect(filt).connect(amp); out(amp, { verb }); src.start(t); src.stop(t + dur + .05);
+    src.connect(filt).connect(amp); out(amp, { verb, bus }); src.start(t); src.stop(t + dur + .05);
   }
   const N = n => 440 * Math.pow(2, (n - 69) / 12);   // MIDI note -> Hz
   const play = fn => { if (muted) return; try { init(); fn(); } catch (e) { console.warn("sound", e); } };
 
+  // ---------- generative lofi horror soundtrack (original composition) ----------
+  let mBus, mPlaying = false, mTimer = null, mNext = 0, mStep = 0, crackle = null;
+  const BPM = 74, S16 = 60 / BPM / 4;
+  const PROG = [
+    { root: 45, tones: [57, 60, 64, 67, 71] },   // Am9
+    { root: 41, tones: [57, 60, 64, 65] },       // Fmaj7
+    { root: 38, tones: [53, 57, 60, 64] },       // Dm9
+    { root: 40, tones: [56, 59, 62, 64] }        // E7
+  ];
+  const ARP = [0, 2, 1, 3, 2, 4, 3, 1];
+  function mInit() {
+    if (mBus) return;
+    mBus = ctx.createGain(); mBus.gain.value = 0;
+    const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 3600; lp.Q.value = .5;
+    const send = ctx.createGain(); send.gain.value = .3;
+    mBus.connect(lp).connect(master); lp.connect(send).connect(verbIn);
+  }
+  function startCrackle() {
+    const len = ctx.sampleRate * 3, buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * .01;
+    for (let k = 0; k < 45; k++) {
+      const p = Math.floor(Math.random() * (len - 200)), amp = (Math.random() * .4 + .15) * (Math.random() < .5 ? -1 : 1);
+      for (let j = 0; j < 120; j++) d[p + j] += amp * Math.exp(-j / 16);
+    }
+    const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
+    const f = ctx.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = 2400; f.Q.value = .4;
+    const g = ctx.createGain(); g.gain.value = .8;
+    src.connect(f).connect(g).connect(mBus); src.start(); return src;
+  }
+  function mPlayStep(s, t0) {
+    const cycle = Math.floor(s / 64), bar = Math.floor(s / 16) % 4, pos = s % 16, ch = PROG[bar], bus = mBus;
+    const t = t0 + (pos % 4 === 2 ? S16 * .28 : 0);              // lazy swing on the off-beats
+    if (pos === 0) {
+      ch.tones.forEach(n => synth({ f: N(n), t0, dur: S16 * 16 + .5, vol: .028, voices: 3, detune: 11, cut: 650, cutEnd: 1500, q: 2, a: .7, r: 1.3, bus, verb: 0 }));
+      synth({ f: N(ch.root), t0, dur: S16 * 6, type: "triangle", vol: .24, voices: 1, cut: 500, a: .01, r: .4, bus, verb: 0 });
+    }
+    if (pos === 10) synth({ f: N(ch.root), t0: t, dur: S16 * 3, type: "triangle", vol: .17, voices: 1, cut: 500, bus, verb: 0 });
+    if (cycle >= 1) {                                              // drums come in on the 2nd pass
+      if (pos === 0 || pos === 10 || (pos === 7 && bar % 2)) synth({ f: 115, glide: 42, t0: t, dur: .32, type: "sine", vol: .55, voices: 1, cut: 800, a: .002, r: .3, bus, verb: 0 });
+      if (pos === 4 || pos === 12) {
+        noise({ t0: t, dur: .2, vol: .2, type: "bandpass", f: 1700, q: .7, a: .002, bus, verb: 0 });
+        synth({ f: 200, glide: 150, t0: t, dur: .1, type: "triangle", vol: .08, voices: 1, bus, verb: 0 });
+      }
+      if (pos % 2 === 0) noise({ t0: t, dur: .035, vol: pos % 4 ? .03 : .05, type: "highpass", f: 7500, a: .001, bus, verb: 0 });
+    }
+    if (cycle >= 2 && cycle % 2 === 0 && pos % 2 === 0) {         // arpeggio on alternate passes
+      const n = ch.tones[ARP[(pos / 2) % ARP.length] % ch.tones.length] + 12;
+      synth({ f: N(n), t0: t, dur: S16 * 1.6, type: "triangle", vol: .05, voices: 1, cut: 2600, a: .005, r: .25, bus, verb: 0, delay: .25 });
+    }
+    if (cycle % 2 === 1 && bar === 3 && pos === 8)                 // little music-box answer
+      [76, 74, 71].forEach((n, i) => synth({ f: N(n), t0: t + i * S16 * 2, dur: .6, type: "sine", vol: .05, voices: 1, bus, delay: .3, verb: 0 }));
+  }
+  function mSchedule() {
+    if (mNext < ctx.currentTime - .3) mNext = ctx.currentTime + .05;   // tab was asleep: skip ahead
+    while (mNext < ctx.currentTime + .3) { mPlayStep(mStep, mNext); mStep++; mNext += S16; }
+  }
+  function fadeTo(v, sec) {
+    const t = ctx.currentTime; mBus.gain.cancelScheduledValues(t); mBus.gain.setValueAtTime(mBus.gain.value, t); mBus.gain.linearRampToValueAtTime(v, t + sec);
+  }
+  const music = {
+    get playing() { return mPlaying; },
+    start() {
+      if (mPlaying) return; init(); mInit(); mPlaying = true; mStep = 0; mNext = ctx.currentTime + .1;
+      fadeTo(.9, 3); crackle = startCrackle(); mTimer = setInterval(mSchedule, 60); mSchedule();
+    },
+    stop(fade = 1.5) {
+      if (!mPlaying) return; mPlaying = false; clearInterval(mTimer); fadeTo(0, fade);
+      const c = crackle; setTimeout(() => { try { c.stop(); } catch {} }, fade * 1000 + 150);
+    },
+    duck(sec = 3) {
+      if (!mPlaying) return; const t = ctx.currentTime;
+      mBus.gain.cancelScheduledValues(t); mBus.gain.setValueAtTime(mBus.gain.value, t);
+      mBus.gain.linearRampToValueAtTime(.2, t + .2); mBus.gain.setValueAtTime(.2, t + sec); mBus.gain.linearRampToValueAtTime(.9, t + sec + 1.5);
+    },
+    // for offline previews: schedule N steps immediately
+    prerender(steps) { init(); mInit(); mBus.gain.value = .9; startCrackle(); for (let i = 0; i < steps; i++) mPlayStep(i, .1 + i * S16); return .1 + steps * S16; }
+  };
+
   return {
-    init, N,
+    init, N, music,
     get muted() { return muted; },
     setMuted(m) { muted = m; store.set("muted", m ? "1" : ""); if (master) master.gain.value = m ? 0 : .85; },
+
+    // distant thunder (with a sharp crack up front)
+    thunder: () => play(() => {
+      noise({ dur: .25, vol: .22, type: "highpass", f: 2500, a: .002, verb: .6 });
+      noise({ at: .05, dur: 3.4, vol: .5, type: "lowpass", f: 380, fEnd: 45, q: .7, a: .08, verb: .9 });
+    }),
+
+    // old-TV static burst for the intro
+    staticBurst: () => play(() => {
+      noise({ dur: .75, vol: .22, type: "bandpass", f: 3200, q: .3, a: .005, verb: .2 });
+      synth({ f: 60, dur: .75, type: "square", vol: .05, voices: 1, cut: 400, verb: 0 });
+    }),
 
     // tiny UI tick for taps/tabs
     tap: () => play(() => synth({ f: N(96), dur: .06, type: "square", vol: .3, cut: 4000, voices: 1, verb: .1 })),

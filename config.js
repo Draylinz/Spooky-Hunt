@@ -18,7 +18,14 @@ const HUNT = {
   hashtag: "#SpookyHunt2026",
   defaultMinutes: 60,
   unlockSocialAt: 15,       // decorations needed before Social Posts unlock
-  maxFileMB: 200
+  maxFileMB: 200,
+
+  // Landing page (shown before the hunt starts)
+  // eventStart: when the countdown counts down to (Eastern time, -04:00)
+  eventStart: "2026-10-30T18:00:00-04:00",
+  whenLabel: "Friday night · exact time TBA",
+  tagline: "Something is waiting in the dark. Gather your crew.",
+  music: true               // play the lofi soundtrack on the landing page
 };
 
 // 3) The list of things to find / do

@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Halloween Scavenger Hunt</title>
+<meta name="description" content="Friday night. Gather your crew. Something is waiting in the dark.">
+<meta property="og:title" content="Halloween Scavenger Hunt">
+<meta property="og:description" content="Friday night. Gather your crew. Something is waiting in the dark.">
+<meta name="theme-color" content="#060408">
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@700&family=Rubik:wght@400;500;600;700&family=VT323&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -13,38 +17,131 @@
 <script src="engine.js"></script>
 </head>
 <body>
-<canvas id="ash"></canvas><div class="grain"></div>
+
+<!-- ============ INTRO GATE ============ -->
+<div id="gate" class="gate">
+  <canvas id="static"></canvas>
+  <div class="gate-inner">
+    <div class="gate-signal" id="gateSignal">▮ SIGNAL DETECTED</div>
+    <button id="enterBtn" class="enter-btn">TAP TO ENTER</button>
+    <div class="gate-hint">🎧 sound on for the full experience</div>
+  </div>
+</div>
+
+<!-- ============ BACKGROUND SCENE ============ -->
+<div class="scene" aria-hidden="true">
+  <div class="sky-glow"></div>
+  <div class="moon"></div>
+  <div class="cloud c1"></div><div class="cloud c2"></div><div class="cloud c3"></div>
+  <div id="batLayer"></div>
+  <svg class="skyline" viewBox="0 0 1200 260" preserveAspectRatio="xMidYMax slice">
+    <defs><filter id="glowF" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+    <path d="M0 260 L0 190 Q120 160 240 180 T480 170 T720 185 T960 165 T1200 178 L1200 260Z" fill="#0b0408"/>
+    <!-- bare trees -->
+    <g stroke="#050204" stroke-linecap="round" fill="none">
+      <path d="M120 190 L118 120 M118 150 L95 128 M118 140 L140 112 M140 112 L150 100 M95 128 L84 120 M118 125 L110 100" stroke-width="5"/>
+      <path d="M1080 178 L1084 98 M1084 130 L1110 104 M1084 118 L1060 92 M1110 104 L1122 96 M1060 92 L1050 84 M1084 105 L1092 80" stroke-width="5"/>
+      <path d="M330 178 L332 140 M332 155 L318 140 M332 148 L346 132" stroke-width="3"/>
+    </g>
+    <!-- haunted house -->
+    <g fill="#050204">
+      <polygon points="760,170 760,110 800,78 840,110 840,170"/>
+      <polygon points="820,170 820,92 846,70 872,92 872,170"/>
+      <rect x="842" y="52" width="8" height="22"/>
+      <polygon points="700,175 700,140 735,118 770,140 770,175"/>
+    </g>
+    <g fill="#ffb21f" filter="url(#glowF)" class="windows">
+      <rect x="780" y="120" width="12" height="16" rx="1"/><rect x="808" y="120" width="12" height="16" rx="1" class="w-flick"/>
+      <rect x="840" y="104" width="10" height="13" rx="1"/><rect x="726" y="148" width="11" height="13" rx="1" class="w-flick2"/>
+      <circle cx="800" cy="98" r="5"/>
+    </g>
+    <!-- fence -->
+    <g fill="#050204">
+      <rect x="560" y="176" width="300" height="3"/><rect x="560" y="186" width="300" height="3"/>
+      <g id="pickets"></g>
+    </g>
+    <!-- jack-o'-lanterns -->
+    <g class="pumpkins" filter="url(#glowF)">
+      <ellipse cx="640" cy="192" rx="12" ry="9" fill="#ff7a18"/><path d="M634 189 l3 -3 l3 3z M643 189 l3 -3 l3 3z M634 195 q6 4 12 0" fill="#3a1000" stroke="#3a1000"/>
+      <ellipse cx="905" cy="182" rx="9" ry="7" fill="#ff7a18"/><path d="M900 180 l2 -2 l2 2z M907 180 l2 -2 l2 2z M901 185 q4 3 8 0" fill="#3a1000" stroke="#3a1000"/>
+    </g>
+  </svg>
+  <div class="fog f1"></div><div class="fog f2"></div>
+</div>
+<canvas id="ash"></canvas>
+<div class="lightning" id="lightning"></div>
+<div class="grain"></div>
 
 <header class="top">
   <h1 class="spooky" id="title"></h1>
-  <div class="hdr-right"><button class="mute" id="muteBtn" onclick="toggleMute()" title="Sound on/off">🔊</button><div class="clock" id="clock">--:--</div></div>
+  <div class="hdr-right">
+    <button class="mute" id="musicBtn" onclick="toggleMusic()" title="Music on/off">♫</button>
+    <button class="mute" id="muteBtn" onclick="toggleMute()" title="Sound on/off">🔊</button>
+    <div class="clock" id="clock">--:--</div>
+  </div>
 </header>
 
 <main>
-  <!-- JOIN -->
-  <section id="v-join" class="card narrow hidden">
-    <h2 class="spooky center" style="font-size:26px;margin:0 0 6px;">Enter if you dare…</h2>
-    <input id="playerName" maxlength="24" placeholder="Your name" autocomplete="given-name">
-    <div class="tabs">
-      <button class="tab active" id="tCreate" onclick="joinMode('create')">🎃 New team</button>
-      <button class="tab" id="tJoin" onclick="joinMode('join')">👻 Join a team</button>
+  <!-- ============ LANDING (before & during the hunt, until you're in) ============ -->
+  <section id="v-landing" class="hidden">
+    <div class="hero">
+      <div class="kicker" id="kicker">On Friday night, the neighborhood gets strange</div>
+      <h2 class="hero-title" id="heroTitle"></h2>
+      <p class="tagline" id="tagline"></p>
+      <div class="countdown" id="countdown">
+        <div><b id="cdD">0</b><span>days</span></div>
+        <div><b id="cdH">00</b><span>hrs</span></div>
+        <div><b id="cdM">00</b><span>min</span></div>
+        <div><b id="cdS">00</b><span>sec</span></div>
+      </div>
+      <div class="when" id="whenLabel"></div>
     </div>
-    <div id="mCreate"><input id="newTeamName" maxlength="40" placeholder="Team name, e.g. The Boo Crew" autocomplete="off"></div>
-    <div id="mJoin" class="hidden"><select id="teamSelect"></select></div>
-    <button onclick="doJoin()">Let's go</button>
-    <div class="err" id="joinErr"></div>
-  </section>
 
-  <!-- GAME -->
-  <section id="v-game" class="layout hidden">
-    <div>
-      <div class="card hidden" id="waitingCard">
-        <h2 class="spooky center" style="font-size:24px;margin:0;">⏳ Waiting for the host…</h2>
-        <p class="center">You're <b id="wName"></b> on team <b id="wTeam"></b>.</p>
-        <p class="center small">Say hi in the chat 💬 while you wait. · <a class="link" onclick="leave()">Switch team</a></p>
+    <div class="landing-grid">
+      <!-- join -->
+      <div class="card" id="joinCard">
+        <h3 class="spooky center" style="font-size:22px;margin:0 0 4px">Enter if you dare…</h3>
+        <p class="small center" id="joinSub" style="margin:0 0 6px">Sign up your team now. Pick a name, start a team or join your friends.</p>
+        <input id="playerName" maxlength="24" placeholder="Your name" autocomplete="given-name">
+        <div class="tabs">
+          <button class="tab active" id="tCreate" onclick="joinMode('create')">🎃 New team</button>
+          <button class="tab" id="tJoin" onclick="joinMode('join')">👻 Join a team</button>
+        </div>
+        <div id="mCreate"><input id="newTeamName" maxlength="40" placeholder="Team name, e.g. The Boo Crew" autocomplete="off"></div>
+        <div id="mJoin" class="hidden"><select id="teamSelect"></select></div>
+        <button onclick="doJoin()">I'm in</button>
+        <div class="err" id="joinErr"></div>
       </div>
 
-      <div class="card hidden" id="playCard">
+      <!-- already signed up -->
+      <div class="card hidden" id="inCard">
+        <div class="in-badge">✔ YOU'RE IN</div>
+        <p class="in-who"><b id="inName"></b><br><span class="small">playing for</span></p>
+        <div class="in-team spooky" id="inTeam"></div>
+        <p class="small center" id="inNote">See you Friday. Keep this page handy. It turns into your game board when the hunt starts.</p>
+        <button class="purple" onclick="shareInvite()">📨 Invite your crew</button>
+        <button class="ghost" onclick="toggleChat(true)">💬 Open the group chat</button>
+        <p class="small center" style="margin-top:12px"><a class="link" onclick="leave()">Switch team</a></p>
+      </div>
+
+      <!-- who's coming -->
+      <div class="card blue" id="whoCard">
+        <h3 class="spooky" style="font-size:20px;margin:0 0 6px">Who's coming</h3>
+        <div class="who-stats"><span><b id="statPlayers">0</b> players</span><span><b id="statTeams">0</b> teams</span></div>
+        <div id="whoList"><p class="small">No one yet… be the first.</p></div>
+      </div>
+    </div>
+
+    <div class="card how">
+      <h3 class="spooky center" style="font-size:22px;margin:0 0 14px">How it works</h3>
+      <div class="how-grid" id="howGrid"></div>
+    </div>
+  </section>
+
+  <!-- ============ GAME (during the hunt) ============ -->
+  <section id="v-game" class="layout hidden">
+    <div>
+      <div class="card" id="playCard">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
           <h2 class="spooky" id="teamLabel" style="margin:0;font-size:24px"></h2>
           <div><span id="myPoints" class="score-big">0</span> <span class="small">PTS</span></div>
@@ -63,7 +160,7 @@
     </aside>
   </section>
 
-  <!-- RESULTS -->
+  <!-- ============ RESULTS ============ -->
   <section id="v-results" class="card hidden" style="max-width:720px;margin:20px auto;text-align:center">
     <h2 class="spooky" style="font-size:22px;margin:0;">The hunt is over!</h2>
     <div class="winner" id="winner"></div>
@@ -71,7 +168,7 @@
     <button onclick="openGallery()">🦇 View the Gallery</button>
   </section>
 
-  <!-- GALLERY -->
+  <!-- ============ GALLERY ============ -->
   <section id="v-gallery" class="hidden">
     <div class="card center">
       <h2 class="spooky" style="font-size:28px;margin:0 0 8px;">All Submissions</h2>
@@ -104,18 +201,111 @@
 /* ---------- state ---------- */
 let me = { name: store.get("name"), teamId: store.get("teamId"), team: store.get("team") };
 let state = null, myTeam = null, teams = [], events = {}, myThumbs = {}, gallery = [];
-let tab = CATEGORIES[0].key, tick = null, endedOnce = false, lastLeft = null;
-let unsubTeam, unsubThumbs;
+let tab = CATEGORIES[0].key, tick = null, endedOnce = false, lastLeft = null, prevPhase = null;
+let unsubTeam, unsubThumbs, entered = false;
+let musicOn = store.get("music") ? store.get("music") === "on" : HUNT.music !== false;
 
 document.title = HUNT.title; $("title").textContent = HUNT.title; $("unlockN").textContent = HUNT.unlockSocialAt;
+$("tagline").textContent = HUNT.tagline || ""; $("whenLabel").textContent = HUNT.whenLabel || "";
+// hero title: each letter is its own neon tube that powers on separately
+$("heroTitle").innerHTML = HUNT.title.split(" ").map(w => `<span class="word">${[...w].map(c =>
+  `<span class="ltr" style="--d:${(Math.random() * 1.2).toFixed(2)}s">${esc(c)}</span>`).join("")}</span>`).join(" ");
 startAsh("ash");
-function toggleMute() { SOUND.setMuted(!SOUND.muted); $("muteBtn").textContent = SOUND.muted ? "🔇" : "🔊"; if (!SOUND.muted) SOUND.tap(); }
-$("muteBtn").textContent = SOUND.muted ? "🔇" : "🔊";
+function toggleMute() { SOUND.setMuted(!SOUND.muted); updAudioBtns(); if (!SOUND.muted) SOUND.tap(); }
+function toggleMusic() {
+  musicOn = !musicOn; store.set("music", musicOn ? "on" : "off"); updAudioBtns();
+  if (musicOn) SOUND.music.start(); else SOUND.music.stop(.8);
+}
+function updAudioBtns() {
+  $("muteBtn").textContent = SOUND.muted ? "🔇" : "🔊";
+  $("musicBtn").classList.toggle("off", !musicOn); $("musicBtn").title = musicOn ? "Music on" : "Music off";
+}
+updAudioBtns();
 function deny(msg) { SOUND.error(); toast(msg); }
 
-const VIEWS = ["join", "game", "results", "gallery"];
-function show(v) { VIEWS.forEach(x => $("v-" + x).classList.toggle("hidden", x !== v)); }
+const VIEWS = ["landing", "game", "results", "gallery"];
+function show(v) { VIEWS.forEach(x => $("v-" + x).classList.toggle("hidden", x !== v)); document.body.classList.toggle("on-landing", v === "landing"); }
 function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add("show"); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("show"), 2800); }
+
+/* ---------- intro gate ---------- */
+(function intro() {
+  const cv = $("static"), g = cv.getContext("2d"); cv.width = 160; cv.height = 100;
+  const img = g.createImageData(160, 100); let run = true;
+  (function frame() {
+    if (!run) return;
+    for (let i = 0; i < img.data.length; i += 4) { const v = Math.random() * 255 | 0; img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 255; }
+    g.putImageData(img, 0, 0); requestAnimationFrame(frame);
+  })();
+  $("enterBtn").onclick = () => {
+    SOUND.init(); SOUND.staticBurst(); $("gate").classList.add("glitch");
+    setTimeout(() => { lightning(true); }, 420);
+    setTimeout(() => {
+      $("gate").classList.add("gone"); document.body.classList.add("entered"); entered = true;
+      if (musicOn && phase(state) !== "running") SOUND.music.start();
+      setTimeout(() => { run = false; $("gate").remove(); }, 1400);
+      scheduleLightning();
+    }, 800);
+  };
+})();
+
+/* ---------- red lightning + thunder ---------- */
+function lightning(withThunder = true) {
+  const el = $("lightning"); el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");
+  if (withThunder) setTimeout(() => SOUND.thunder(), 120 + Math.random() * 500);
+}
+function scheduleLightning() {
+  setTimeout(() => { if (!document.hidden && phase(state) !== "running") lightning(); scheduleLightning(); }, 16000 + Math.random() * 28000);
+}
+
+/* ---------- bats + fence ---------- */
+(function scenery() {
+  const bat = `<svg viewBox="0 0 64 32"><g fill="#050204"><path d="M32 12C30 8 28 7 26 8C27 10 27 12 26 13C22 10 16 9 10 11C13 12 14 14 14 16C9 15 4 16 0 19C6 19 10 21 12 24C16 21 21 21 24 23C26 20 29 19 32 20Z M32 12L30 7L29 11Z"/><path transform="translate(64 0) scale(-1 1)" d="M32 12C30 8 28 7 26 8C27 10 27 12 26 13C22 10 16 9 10 11C13 12 14 14 14 16C9 15 4 16 0 19C6 19 10 21 12 24C16 21 21 21 24 23C26 20 29 19 32 20Z M32 12L30 7L29 11Z"/></g></svg>`;
+  const layer = $("batLayer");
+  for (let i = 0; i < 6; i++) {
+    const b = document.createElement("div"); b.className = "bat2"; b.innerHTML = bat;
+    b.style.cssText = `top:${8 + Math.random() * 40}vh;--s:${(.5 + Math.random() * .9).toFixed(2)};animation-duration:${(18 + Math.random() * 20).toFixed(1)}s;animation-delay:${(-Math.random() * 30).toFixed(1)}s`;
+    layer.appendChild(b);
+  }
+  $("pickets").innerHTML = Array.from({ length: 31 }, (_, i) => `<polygon points="${560 + i * 10},196 ${560 + i * 10},172 ${563 + i * 10},166 ${566 + i * 10},172 ${566 + i * 10},196"/>`).join("");
+})();
+
+/* ---------- how it works ---------- */
+(function how() {
+  const n = k => CAT[k]?.items.length || 0;
+  const tiles = [
+    ["🎃", "Hunt the haunts", `Track down ${n("decor")} spooky decorations around the neighborhood. 1 pt each.`],
+    ["🧟", "Dare to do it", `${n("challenge")} challenges, caught on camera. 2 pts each.`],
+    ["📱", "Post the proof", `Social posts unlock after ${HUNT.unlockSocialAt} finds. 3 pts each.`],
+    ["⚡", "Expect the unexpected", "Live events hit every phone at random: curses, point steals and flash bonuses."],
+    ["💬", "Talk to the dark", "The group chat is open now. Trash talk is encouraged."],
+    ["🏆", "Glory & gallery", "Most points wins. Every photo and video gets revealed at the end."]
+  ];
+  $("howGrid").innerHTML = tiles.map(([i, t, d]) => `<div class="how-tile"><div class="how-ico">${i}</div><b>${t}</b><p>${d}</p></div>`).join("");
+})();
+
+/* ---------- countdown ---------- */
+const startAt = new Date(HUNT.eventStart || Date.now()).getTime();
+function updCountdown() {
+  const ph = phase(state);
+  if (ph === "running") {
+    $("kicker").textContent = "⚠ The hunt is LIVE ⚠";
+    $("countdown").classList.add("live");
+    const l = secondsLeft(state); $("cdD").textContent = "LIVE"; $("cdH").textContent = String(Math.floor(l / 3600)).padStart(2, "0");
+    $("cdM").textContent = String(Math.floor(l % 3600 / 60)).padStart(2, "0"); $("cdS").textContent = String(l % 60).padStart(2, "0");
+    $("whenLabel").textContent = "time left · join now and start hunting"; $("joinSub").textContent = "The hunt has started. Jump in now!";
+    return;
+  }
+  $("countdown").classList.remove("live");
+  $("kicker").textContent = "On Friday night, the neighborhood gets strange";
+  $("whenLabel").textContent = HUNT.whenLabel || ""; $("joinSub").textContent = "Sign up your team now. Pick a name, start a team or join your friends.";
+  let d = Math.max(0, Math.floor((startAt - Date.now()) / 1000));
+  if (!d) { $("kicker").textContent = "Any minute now…"; }
+  $("cdD").textContent = Math.floor(d / 86400); d %= 86400;
+  $("cdH").textContent = String(Math.floor(d / 3600)).padStart(2, "0"); d %= 3600;
+  $("cdM").textContent = String(Math.floor(d / 60)).padStart(2, "0");
+  $("cdS").textContent = String(d % 60).padStart(2, "0");
+}
+setInterval(updCountdown, 1000);
 
 /* ---------- joining ---------- */
 let mode = "create";
@@ -128,7 +318,7 @@ async function loadTeams() {
   const sel = $("teamSelect"); sel.innerHTML = "<option value=''>Loading…</option>";
   try {
     const s = await db.collection(COL.teams).orderBy("name").get();
-    sel.innerHTML = s.empty ? "<option value=''>No teams yet — make one!</option>" : s.docs.map(d => `<option value="${d.id}">${esc(d.data().name)}</option>`).join("");
+    sel.innerHTML = s.empty ? "<option value=''>No teams yet. Make one!</option>" : s.docs.map(d => `<option value="${d.id}">${esc(d.data().name)}</option>`).join("");
   } catch (e) { $("joinErr").textContent = "Can't reach the game: " + e.message; }
 }
 async function doJoin() {
@@ -140,32 +330,42 @@ async function doJoin() {
       tname = $("newTeamName").value.trim(); id = slug(tname);
       if (!id) { SOUND.error(); return $("joinErr").textContent = "Give your team a name."; }
       const ref = db.collection(COL.teams).doc(id), snap = await ref.get();
-      if (snap.exists) { if (!confirm(`"${snap.data().name}" already exists. Join it?`)) return; tname = snap.data().name; }
-      else await ref.set({ name: tname, points: 0, done: [], decorCount: 0, createdAt: FV.serverTimestamp() });
+      if (snap.exists) {
+        if (!confirm(`"${snap.data().name}" already exists. Join it?`)) return;
+        tname = snap.data().name; await ref.update({ members: FV.arrayUnion(name) });
+      } else await ref.set({ name: tname, points: 0, done: [], decorCount: 0, members: [name], createdAt: FV.serverTimestamp() });
     } else {
       const sel = $("teamSelect"); id = sel.value; if (!id) return; tname = sel.options[sel.selectedIndex].textContent;
+      await db.collection(COL.teams).doc(id).update({ members: FV.arrayUnion(name) });
     }
     me = { name, teamId: id, team: tname };
     store.set("name", name); store.set("teamId", id); store.set("team", tname);
-    SOUND.join();
+    SOUND.join(); lightning(false);
     sendChat("👻", "", `${name} joined ${tname}`, "feed");
     enter();
   } catch (e) { $("joinErr").textContent = "Couldn't join: " + e.message; }
 }
-function leave() {
+async function leave() {
   if (!confirm("Switch teams? Your current team keeps its points.")) return;
+  try { await db.collection(COL.teams).doc(me.teamId).update({ members: FV.arrayRemove(me.name) }); } catch {}
   unsubTeam?.(); unsubThumbs?.(); me.teamId = me.team = ""; myTeam = null; myThumbs = {};
   store.set("teamId"); store.set("team"); $("playerName").value = me.name; render();
 }
+function shareInvite() {
+  SOUND.tap();
+  const data = { title: HUNT.title, text: `Join my team "${me.team}" for the Halloween Scavenger Hunt, ${HUNT.whenLabel || "Friday night"}. 🎃`, url: location.origin + location.pathname };
+  if (navigator.share) navigator.share(data).catch(() => {});
+  else navigator.clipboard?.writeText(`${data.text} ${data.url}`).then(() => toast("🔗 Invite copied. Paste it in your group chat!"), () => toast(data.url));
+}
 
 function enter() {
-  $("wName").textContent = $("pName").textContent = me.name;
-  $("wTeam").textContent = $("teamLabel").textContent = me.team;
+  $("pName").textContent = me.name; $("teamLabel").textContent = me.team;
+  $("inName").textContent = me.name; $("inTeam").textContent = me.team;
   $("chatBtn").classList.remove("hidden");
   unsubTeam?.(); unsubThumbs?.();
   unsubTeam = db.collection(COL.teams).doc(me.teamId).onSnapshot(d => {
     if (!d.exists) { store.set("teamId"); store.set("team"); me.teamId = ""; toast("Your team was cleared by the host."); render(); return; }
-    myTeam = d.data(); me.team = myTeam.name; updateMine();
+    myTeam = d.data(); me.team = myTeam.name; $("inTeam").textContent = me.team; updateMine();
   });
   unsubThumbs = db.collection(COL.uploads).where("teamId", "==", me.teamId).onSnapshot(s => {
     myThumbs = {}; s.forEach(d => { const u = d.data(); (myThumbs[u.itemId] ||= []).push(u); }); renderItems();
@@ -252,7 +452,7 @@ async function onPick(input) {
   if (phase(state) !== "running") return deny("The hunt isn't running right now.");
   if (item.cat === "social" && !unlocked()) return deny(`🔒 Find ${HUNT.unlockSocialAt} decorations first.`);
   if (item.cat === "bonus" && item.ev.expiresAtMs < Date.now()) return deny("⏰ That bonus has expired.");
-  if (file.size > HUNT.maxFileMB * 1048576) return deny(`File is over ${HUNT.maxFileMB} MB — try a shorter clip.`);
+  if (file.size > HUNT.maxFileMB * 1048576) return deny(`File is over ${HUNT.maxFileMB} MB. Try a shorter clip.`);
 
   const contentType = file.type || (/\.(mov|mp4|webm)$/i.test(file.name) ? "video/mp4" : "image/jpeg");
   const path = `uploads/${me.teamId}/${id.replace(":", "_")}_${Date.now()}.${extFor(file)}`;
@@ -296,15 +496,26 @@ async function onPick(input) {
   finally { busy.delete(id); renderItems(); }
 }
 
-/* ---------- scoreboard ---------- */
+/* ---------- scoreboard + who's coming ---------- */
 let lastPts = {};
 db.collection(COL.teams).orderBy("points", "desc").onSnapshot(s => {
   teams = s.docs.map(d => ({ id: d.id, ...d.data() }));
   $("board").innerHTML = teams.map((t, i) => `<div class="row ${t.id === me.teamId ? "me" : ""} ${lastPts[t.id] !== undefined && lastPts[t.id] !== t.points ? "bump" : ""}">
     <span class="rk">${["🥇", "🥈", "🥉"][i] || "#" + (i + 1)}</span><span class="nm">${esc(t.name)}</span><span class="pt">${t.points || 0}</span></div>`).join("") || `<div class="small">No teams yet…</div>`;
   lastPts = Object.fromEntries(teams.map(t => [t.id, t.points]));
+  renderWho();
   if (phase(state) === "ended") renderResults();
 }, e => { $("board").innerHTML = `<div class="err">Can't reach the game (${esc(e.code)}).</div>`; });
+
+function renderWho() {
+  const list = [...teams].sort((a, b) => (b.members?.length || 0) - (a.members?.length || 0) || (a.name > b.name ? 1 : -1));
+  const players = list.reduce((n, t) => n + (t.members?.length || 0), 0);
+  $("statPlayers").textContent = players; $("statTeams").textContent = list.length;
+  $("whoList").innerHTML = list.length ? list.map(t => `<div class="who-team ${t.id === me.teamId ? "me" : ""}">
+      <div class="who-name">${esc(t.name)}<span>${t.members?.length || 0}</span></div>
+      <div class="chips">${(t.members || []).map(m => `<span class="chip">${esc(m)}</span>`).join("") || `<span class="small">waiting for members…</span>`}</div>
+    </div>`).join("") : `<p class="small">No one yet… be the first.</p>`;
+}
 
 /* ---------- live events ---------- */
 let eventsLoaded = false;
@@ -321,6 +532,7 @@ db.collection(COL.events).orderBy("firedAtMs").onSnapshot(s => {
 function nextPopup() {
   if ($("popup").innerHTML || !popQueue.length) return;
   const e = popQueue.shift();
+  SOUND.music.duck(4);
   SOUND.event(e.type === "points" && /-/.test(e.result || "") ? "penalty" : e.type); flickerScreen(); if (navigator.vibrate) navigator.vibrate([300, 80, 120, 80, 400]);
   $("popup").innerHTML = `<div class="overlay" onclick="if(event.target===this)closePopup()"><div class="eventbox">
     <h2 class="spooky">${esc(e.title)}</h2>${e.text ? `<p>${esc(e.text)}</p>` : ""}
@@ -333,8 +545,8 @@ startAutoEvents(() => state, () => new Set(Object.keys(events)));
 
 /* ---------- chat ---------- */
 let chatOpen = false, unread = 0, chatSeen = null;
-function toggleChat() {
-  chatOpen = !chatOpen; $("chatPanel").classList.toggle("hidden", !chatOpen);
+function toggleChat(force) {
+  chatOpen = typeof force === "boolean" ? force : !chatOpen; $("chatPanel").classList.toggle("hidden", !chatOpen);
   if (chatOpen) { unread = 0; updBadge(); $("chatLog").scrollTop = 1e9; setTimeout(() => $("chatInput").focus(), 50); }
 }
 function updBadge() { $("badge").textContent = unread; $("badge").classList.toggle("hidden", !unread); }
@@ -353,25 +565,39 @@ listenChat(msgs => {
 stateRef.onSnapshot(d => { state = d.exists ? d.data({ serverTimestamps: "estimate" }) : { status: "waiting" }; render(); },
   e => { $("clock").textContent = "--:--"; });
 
+// pause the soundtrack when the tab is in the background
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) SOUND.music.stop(.3);
+  else if (entered && musicOn && phase(state) !== "running") SOUND.music.start();
+});
+
 function render() {
   clearInterval(tick);
   const ph = phase(state);
+  // soundtrack follows the game: off while hunting, back on before/after
+  if (prevPhase && prevPhase !== ph && entered) {
+    if (ph === "running") SOUND.music.stop(2);
+    else if (musicOn) setTimeout(() => { if (phase(state) !== "running") SOUND.music.start(); }, ph === "ended" ? 7000 : 0);
+  }
+  prevPhase = ph;
+  $("clock").classList.toggle("hidden", ph === "waiting");
   $("clock").classList.remove("low");
-  if (me.name) $("chatBtn").classList.remove("hidden");
+  if (me.name && me.teamId) $("chatBtn").classList.remove("hidden");
 
   if (ph === "ended") {
     $("clock").textContent = "00:00";
-    if (!endedOnce) { endedOnce = true; popQueue.length = 0; $("popup").innerHTML = ""; if (state) { SFX.end(); flickerScreen(); } }
+    if (!endedOnce) { endedOnce = true; popQueue.length = 0; $("popup").innerHTML = ""; if (state && entered) { SFX.end(); flickerScreen(); } }
     if ($("v-gallery").classList.contains("hidden")) show("results");
     renderResults(); return;
   }
   endedOnce = false;
-  if (!me.teamId) { show("join"); if (me.name) $("playerName").value = me.name; }
+  if (me.teamId && ph === "running") show("game");
   else {
-    show("game");
-    $("waitingCard").classList.toggle("hidden", ph === "running");
-    $("playCard").classList.toggle("hidden", ph !== "running");
+    show("landing");
+    $("joinCard").classList.toggle("hidden", !!me.teamId); $("inCard").classList.toggle("hidden", !me.teamId);
+    if (!me.teamId && me.name) $("playerName").value = me.name;
   }
+  updCountdown();
   const step = () => {
     const left = secondsLeft(state);
     if (ph === "running" && left !== lastLeft) {
@@ -389,7 +615,7 @@ function render() {
 /* ---------- results + gallery ---------- */
 function renderResults() {
   const [first, ...rest] = teams;
-  $("winner").textContent = first ? `🏆 ${first.name} — ${first.points || 0} pts` : "No teams played 👻";
+  $("winner").textContent = first ? `🏆 ${first.name}: ${first.points || 0} pts` : "No teams played 👻";
   $("finalBoard").innerHTML = rest.map((t, i) => `<div class="row ${t.id === me.teamId ? "me" : ""}"><span class="rk">#${i + 2}</span><span class="nm">${esc(t.name)}</span><span class="pt">${t.points || 0}</span></div>`).join("");
 }
 async function openGallery() {
@@ -413,7 +639,7 @@ function renderGallery() {
 }
 
 /* ---------- boot ---------- */
-if (me.teamId) enter(); else { show("join"); if (me.name) { $("playerName").value = me.name; } }
+if (me.teamId) enter(); else render();
 </script>
 </body>
 </html>

@@ -180,7 +180,7 @@ $("aSend").onclick = () => {
 /* teams */
 db.collection(COL.teams).orderBy("points", "desc").onSnapshot(s => {
   teams = s.docs.map(d => ({ id: d.id, ...d.data() }));
-  $("teams").innerHTML = teams.map((t, i) => `<div class="row"><span class="rk">#${i + 1}</span><span class="nm">${esc(t.name)} <span class="small">· ${t.decorCount || 0} decor · ${(t.done || []).length} items</span></span><span class="pt">${t.points || 0}</span></div>`).join("") || `<div class="small">No teams yet.</div>`;
+  $("teams").innerHTML = teams.map((t, i) => `<div class="row"><span class="rk">#${i + 1}</span><span class="nm">${esc(t.name)} <span class="small">· ${(t.members || []).length} players · ${t.decorCount || 0} decor · ${(t.done || []).length} items</span></span><span class="pt">${t.points || 0}</span></div>`).join("") || `<div class="small">No teams yet.</div>`;
   const cur = $("aTeam").value;
   $("aTeam").innerHTML = teams.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join(""); if (cur) $("aTeam").value = cur;
 });
