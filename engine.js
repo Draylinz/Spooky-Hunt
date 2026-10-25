@@ -198,7 +198,7 @@ const SOUND = (() => {
   const play = fn => { if (muted) return; try { init(); fn(); } catch (e) { console.warn("sound", e); } };
 
   // ---------- generative lofi horror soundtrack (original composition) ----------
-  let mBus, mPlaying = false, mTimer = null, mNext = 0, mStep = 0, crackle = null;
+  let mBus, mPlaying = false, mTimer = null, mNext = 0, mStep = 0;
   const BPM = 74, S16 = 60 / BPM / 4;
   const PROG = [
     { root: 45, tones: [57, 60, 64, 67, 71] },   // Am9
@@ -213,18 +213,6 @@ const SOUND = (() => {
     const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 3600; lp.Q.value = .5;
     const send = ctx.createGain(); send.gain.value = .3;
     mBus.connect(lp).connect(master); lp.connect(send).connect(verbIn);
-  }
-  function startCrackle() {
-    const len = ctx.sampleRate * 3, buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * .01;
-    for (let k = 0; k < 45; k++) {
-      const p = Math.floor(Math.random() * (len - 200)), amp = (Math.random() * .4 + .15) * (Math.random() < .5 ? -1 : 1);
-      for (let j = 0; j < 120; j++) d[p + j] += amp * Math.exp(-j / 16);
-    }
-    const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
-    const f = ctx.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = 2400; f.Q.value = .4;
-    const g = ctx.createGain(); g.gain.value = .8;
-    src.connect(f).connect(g).connect(mBus); src.start(); return src;
   }
   function mPlayStep(s, t0) {
     const cycle = Math.floor(s / 64), bar = Math.floor(s / 16) % 4, pos = s % 16, ch = PROG[bar], bus = mBus;
@@ -260,11 +248,10 @@ const SOUND = (() => {
     get playing() { return mPlaying; },
     start() {
       if (mPlaying) return; init(); mInit(); mPlaying = true; mStep = 0; mNext = ctx.currentTime + .1;
-      fadeTo(.9, 3); crackle = startCrackle(); mTimer = setInterval(mSchedule, 60); mSchedule();
+      fadeTo(.9, 3); mTimer = setInterval(mSchedule, 60); mSchedule();
     },
     stop(fade = 1.5) {
       if (!mPlaying) return; mPlaying = false; clearInterval(mTimer); fadeTo(0, fade);
-      const c = crackle; setTimeout(() => { try { c.stop(); } catch {} }, fade * 1000 + 150);
     },
     duck(sec = 3) {
       if (!mPlaying) return; const t = ctx.currentTime;
@@ -272,7 +259,7 @@ const SOUND = (() => {
       mBus.gain.linearRampToValueAtTime(.2, t + .2); mBus.gain.setValueAtTime(.2, t + sec); mBus.gain.linearRampToValueAtTime(.9, t + sec + 1.5);
     },
     // for offline previews: schedule N steps immediately
-    prerender(steps) { init(); mInit(); mBus.gain.value = .9; startCrackle(); for (let i = 0; i < steps; i++) mPlayStep(i, .1 + i * S16); return .1 + steps * S16; }
+    prerender(steps) { init(); mInit(); mBus.gain.value = .9; for (let i = 0; i < steps; i++) mPlayStep(i, .1 + i * S16); return .1 + steps * S16; }
   };
 
   return {
@@ -393,4 +380,85 @@ function startAsh(canvasId) {
     }
     requestAnimationFrame(frame);
   })();
+}
+
+// Realistic procedural full moon (near-side layout), drawn once into a canvas.
+function drawMoon(cv, px = 360) {
+  cv.width = cv.height = px;
+  const N = px * px, R = px / 2, A = new Float32Array(N), H = new Float32Array(N);
+  let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const P = new Float32Array(256 * 256); for (let i = 0; i < P.length; i++) P[i] = rnd();
+  const sm = t => t * t * (3 - 2 * t);
+  const vn = (x, y) => { const xi = Math.floor(x), yi = Math.floor(y), xf = sm(x - xi), yf = sm(y - yi);
+    const a = P[(xi & 255) + (yi & 255) * 256], b = P[((xi + 1) & 255) + (yi & 255) * 256], c = P[(xi & 255) + ((yi + 1) & 255) * 256], e = P[((xi + 1) & 255) + ((yi + 1) & 255) * 256];
+    return (a * (1 - xf) + b * xf) * (1 - yf) + (c * (1 - xf) + e * xf) * yf; };
+  const fbm = (x, y, o) => { let s = 0, a = .5, f = 1; for (let i = 0; i < o; i++) { s += a * vn(x * f, y * f); a *= .5; f *= 2.02; } return s; };
+  // maria: overlapping soft ellipses [x, y, rx, ry, rot] laid out like the real near side (north up)
+  const maria = [
+    [-.36,-.44,.27,.25,0],                                           // Mare Imbrium
+    [-.66,-.06,.20,.40,.15], [-.58,.26,.16,.16,0], [-.74,-.36,.10,.10,0], // Oceanus Procellarum
+    [-.47,.47,.10,.09,0],                                            // Mare Humorum
+    [-.16,.43,.15,.10,.2],                                           // Mare Nubium
+    [-.02,-.18,.08,.06,0],                                           // Mare Vaporum
+    [-.28,-.06,.15,.13,0], [-.32,.2,.11,.09,0],                      // Mare Insularum + Cognitum
+    [-.05,-.70,.36,.06,0],                                           // Mare Frigoris
+    [.18,-.38,.15,.14,0],                                            // Mare Serenitatis
+    [.34,-.08,.19,.15,.4],                                           // Mare Tranquillitatis
+    [.56,.18,.09,.15,-.25],                                          // Mare Fecunditatis
+    [.32,.34,.08,.07,0],                                             // Mare Nectaris
+    [.69,-.30,.10,.09,0]                                             // Mare Crisium
+  ];
+  for (let y = 0; y < px; y++) for (let x = 0; x < px; x++) {
+    const nx = (x + .5 - px / 2) / R, ny = (y + .5 - px / 2) / R, r2 = nx * nx + ny * ny, i = y * px + x;
+    if (r2 > 1.0) { A[i] = -1; continue; }
+    // domain-warped coords give the seas ragged, organic shorelines
+    const wx = nx + (fbm(nx * 2 + 7, ny * 2, 4) - .5) * .14 + (fbm(nx * 8, ny * 8 + 2, 3) - .5) * .025, wy = ny + (fbm(nx * 2, ny * 2 + 9, 4) - .5) * .14 + (fbm(nx * 8 + 5, ny * 8, 3) - .5) * .025;
+    let f = 0;                                                       // metaball field: seas melt into each other
+    for (const [mx, my, sx, sy, rot] of maria) {
+      const c = Math.cos(rot), sn = Math.sin(rot), dx = wx - mx, dy = wy - my, u = (dx * c + dy * sn) / sx, v = (-dx * sn + dy * c) / sy;
+      f += Math.exp(-(u * u + v * v) * .95);
+    }
+    f += (fbm(nx * 5 + 2, ny * 5 + 8, 4) - .5) * .22;
+    const m = sm(Math.min(1, Math.max(0, (f - .24) / .5)));
+    const hl = .86 + (fbm(nx * 5 + 3, ny * 5 + 1, 5) - .5) * .2 + (fbm(nx * 18, ny * 18, 3) - .5) * .06;               // bright, mottled highlands
+    const sea = .6 + (fbm(nx * 4 + 11, ny * 4 + 4, 4) - .5) * .2;             // darker basalt seas with tone variation
+    A[i] = hl * (1 - m) + sea * m - .05 * m * m + (vn(nx * 70, ny * 70) - .5) * .035;
+    H[i] = m;
+  }
+  // craters stamped in their bounding boxes: subtle bowl shading + faint bright rims (full moon = low contrast)
+  const L = [.55, -.6];
+  const stamp = (cx, cy, cr, k) => {
+    const x0 = Math.max(0, Math.floor((cx - cr * 1.6) * R + px / 2)), x1 = Math.min(px - 1, Math.ceil((cx + cr * 1.6) * R + px / 2));
+    const y0 = Math.max(0, Math.floor((cy - cr * 1.6) * R + px / 2)), y1 = Math.min(px - 1, Math.ceil((cy + cr * 1.6) * R + px / 2));
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      const i = y * px + x; if (A[i] < 0) continue;
+      const nx = (x + .5 - px / 2) / R, ny = (y + .5 - px / 2) / R, dx = (nx - cx) / cr, dy = (ny - cy) / cr, dd = Math.hypot(dx, dy);
+      if (dd < 1) A[i] += k * (-.05 * (1 - dd * dd) + .05 * (dx * L[0] + dy * L[1]) * dd);
+      else if (dd < 1.5) A[i] += k * .045 * (1 - (dd - 1) / .5);
+    }
+  };
+  for (let n = 0; n < 300; n++) { const r = .005 + Math.pow(rnd(), 4.5) * .05; stamp(rnd() * 2 - 1, rnd() * 2 - 1, r, .25 + rnd() * .35); }
+  // ray craters: Tycho (south), Copernicus, Kepler, Aristarchus (brightest spot)
+  const rayC = [[-.05, .62, .028, 1.0, 1.3], [-.33, -.08, .022, .18, .45], [-.52, -.02, .016, .25, .35], [-.62, -.28, .012, .45, .15]];
+  for (const [cx, cy, cr, rayAmt, rayLen] of rayC) {
+    const angs = Array.from({ length: 30 }, () => rnd() * Math.PI * 2), wid = angs.map(() => .05 + rnd() * .1), len = angs.map(() => (.4 + rnd() * .8) * rayLen);
+    for (let i = 0, y = 0; y < px; y++) for (let x = 0; x < px; x++, i++) {
+      if (A[i] < 0) continue;
+      const nx = (x + .5 - px / 2) / R, ny = (y + .5 - px / 2) / R, dx = nx - cx, dy = ny - cy, dist = Math.hypot(dx, dy);
+      if (dist > 1.4 * rayLen + .1) continue;
+      const ang = Math.atan2(dy, dx); let ray = 0;
+      for (let k = 0; k < angs.length; k++) { let da = Math.abs(ang - angs[k]); da = Math.min(da, Math.PI * 2 - da);
+        if (da < wid[k] * 3) ray = Math.max(ray, Math.exp(-((da / wid[k]) ** 2)) * Math.exp(-dist / len[k])); }
+      A[i] += rayAmt * (.05 * ray * (1 - H[i] * .2) + .14 * Math.exp(-((dist / (cr * 2)) ** 2)) + .04 * Math.exp(-((dist / (cr * 6)) ** 2)));
+    }
+  }
+  const g = cv.getContext("2d"), img = g.createImageData(px, px), d = img.data;
+  for (let y = 0; y < px; y++) for (let x = 0; x < px; x++) {
+    const i = y * px + x, o = i * 4; if (A[i] < 0) { d[o + 3] = 0; continue; }
+    const nx = (x + .5 - px / 2) / R, ny = (y + .5 - px / 2) / R, r2 = nx * nx + ny * ny, nz = Math.sqrt(Math.max(0, 1 - r2));
+    const lum = Math.max(0, Math.min(1.08, A[i] * (.9 + .1 * Math.pow(nz, .5))));   // gentle limb darkening
+    d[o] = Math.min(255, lum * 252); d[o + 1] = Math.min(255, lum * 242); d[o + 2] = Math.min(255, lum * 228);
+    d[o + 3] = r2 > .99 ? Math.round(255 * Math.min(1, (1 - r2) / .01)) : 255;
+  }
+  g.putImageData(img, 0, 0);
 }

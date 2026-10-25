@@ -233,11 +233,13 @@ body.flicker main{animation:lightsout 1.4s steps(1),shake .45s}
 .sky-glow{position:absolute;inset:0;background:radial-gradient(ellipse 90% 45% at 50% 100%,rgba(140,10,35,.55),transparent 70%),
   radial-gradient(ellipse 60% 40% at 80% 10%,rgba(90,10,60,.35),transparent 70%);animation:skypulse 9s ease-in-out infinite}
 @keyframes skypulse{50%{opacity:.6}}
-.moon{position:absolute;top:7vh;right:9vw;width:min(26vw,170px);aspect-ratio:1;border-radius:50%;
-  background:radial-gradient(circle at 38% 36%,#fff4f0 0%,#f2d3d0 35%,#c99599 70%,#8d5a62 100%);
-  box-shadow:0 0 40px rgba(255,190,190,.45),0 0 120px rgba(255,60,80,.35),0 0 220px rgba(255,31,61,.2);opacity:.85}
-.moon::after{content:"";position:absolute;inset:0;border-radius:50%;
-  background:radial-gradient(circle at 62% 58%,rgba(120,70,80,.35) 0 9%,transparent 10%),radial-gradient(circle at 35% 66%,rgba(120,70,80,.28) 0 6%,transparent 7%),radial-gradient(circle at 58% 28%,rgba(120,70,80,.22) 0 5%,transparent 6%)}
+.moon{position:absolute;top:7vh;right:9vw;width:min(26vw,170px);aspect-ratio:1;border-radius:50%;opacity:0;transition:opacity 2.5s ease;
+  box-shadow:0 0 30px rgba(255,235,225,.35),0 0 90px rgba(255,120,130,.28),0 0 200px rgba(255,31,61,.22);animation:moonglow 7s ease-in-out infinite}
+.moon.lit{opacity:.95}
+.moon canvas{display:block;width:100%;height:100%;border-radius:50%}
+.moon::after{content:"";position:absolute;inset:0;border-radius:50%;pointer-events:none;
+  background:radial-gradient(circle at 50% 50%,transparent 62%,rgba(255,60,80,.12) 100%)}
+@keyframes moonglow{50%{box-shadow:0 0 36px rgba(255,235,225,.42),0 0 110px rgba(255,120,130,.33),0 0 230px rgba(255,31,61,.26)}}
 .cloud{position:absolute;height:60px;border-radius:50%;background:rgba(20,6,14,.85);filter:blur(14px);animation:drift linear infinite}
 .cloud.c1{top:9vh;width:340px;animation-duration:70s;animation-delay:-20s}
 .cloud.c2{top:16vh;width:260px;height:46px;animation-duration:95s;animation-delay:-60s;opacity:.8}
