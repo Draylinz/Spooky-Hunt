@@ -25,7 +25,12 @@ const HUNT = {
   eventStart: "2026-10-30T18:00:00-04:00",
   whenLabel: "Friday night · exact time TBA",
   tagline: "Something is waiting in the dark. Gather your crew.",
-  music: true               // play the lofi soundtrack on the landing page
+  music: true,              // play the lofi soundtrack on the landing page
+
+  // Live location (players opt in during the hunt; only you see the map)
+  location: true,           // ask players to share their location while hunting
+  proximityFeet: 2640,      // ding both phones when players from different teams get this close (2640 ft = half a mile; 0 = off)
+  proximityStartMinutes: 15 // proximity alerts stay quiet for the first N minutes of the hunt
 };
 
 // 3) The list of things to find / do

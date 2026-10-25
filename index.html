@@ -9,12 +9,12 @@
 <meta property="og:description" content="Friday night. Gather your crew. Something is waiting in the dark.">
 <meta name="theme-color" content="#060408">
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@700&family=Rubik:wght@400;500;600;700&family=VT323&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="stylesheet" href="style.css?v=5">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
-<script src="config.js?v=4"></script>
-<script src="engine.js?v=4"></script>
+<script src="config.js?v=5"></script>
+<script src="engine.js?v=5"></script>
 </head>
 <body>
 
@@ -148,6 +148,7 @@
         </div>
         <div class="small" style="margin-top:8px"><b id="decorCount">0</b>/<span id="unlockN"></span> decorations to unlock Social</div>
         <div class="progress"><div class="fill" id="decorFill"></div></div>
+        <div class="loc-chip hidden" id="locChip"></div>
         <div class="tabs" id="tabs"></div>
         <div class="small" id="catNote" style="margin:8px 2px"></div>
         <div class="items" id="items"></div>
@@ -350,6 +351,7 @@ async function doJoin() {
 async function leave() {
   if (!confirm("Switch teams? Your current team keeps its points.")) return;
   try { await db.collection(COL.teams).doc(me.teamId).update({ members: FV.arrayRemove(me.name) }); } catch {}
+  stopSharing(true);
   unsubTeam?.(); unsubThumbs?.(); me.teamId = me.team = ""; myTeam = null; myThumbs = {};
   store.set("teamId"); store.set("team"); $("playerName").value = me.name; render();
 }
@@ -563,6 +565,100 @@ listenChat(msgs => {
   if (fresh.some(m => m.kind === "user" || m.kind === "host")) SFX.chat();
 });
 
+/* ---------- live location (opt-in, hunt only) ---------- */
+const LOC = { watch: null, last: null, lastSent: 0, lastSentPos: null, unsub: null, others: [], near: {}, cool: {}, asked: false };
+const locKey = () => playerKey(me.teamId, me.name);
+function askLocation() {
+  if (!HUNT.location || !navigator.geolocation || !me.teamId || LOC.watch !== null || LOC.asked) return;
+  LOC.asked = true;
+  const pref = store.get("loc");
+  if (pref === "on") return startSharing();
+  if (pref === "off") return updLocChip();
+  const ft = HUNT.proximityFeet;
+  $("popup").insertAdjacentHTML("beforeend", `<div class="overlay" id="locAsk"><div class="eventbox blue-box">
+    <h2 class="spooky">📍 Share your location?</h2>
+    <p>The host sees a live map of where everyone is${ft ? `, and your phone pings when a rival team is within <b>${fmtRange(ft)}</b>${HUNT.proximityStartMinutes ? ` (starting ${HUNT.proximityStartMinutes} minutes in)` : ""}` : ""}.</p>
+    <p class="small">Only while the hunt is running and this page is open. You can stop anytime.</p>
+    <button onclick="locAnswer(true)">📡 Share my location</button>
+    <button class="ghost" onclick="locAnswer(false)">No thanks</button></div></div>`);
+}
+function locAnswer(yes) {
+  SOUND.tap(); $("locAsk")?.remove();
+  store.set("loc", yes ? "on" : "off");
+  if (yes) startSharing(); else updLocChip();
+}
+function startSharing() {
+  if (LOC.watch !== null || !me.teamId || !navigator.geolocation) return;
+  store.set("loc", "on");
+  LOC.watch = navigator.geolocation.watchPosition(onPos, onPosErr, { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 });
+  LOC.unsub = db.collection(COL.locations).onSnapshot(s => {
+    LOC.others = s.docs.filter(d => d.id !== locKey()).map(d => ({ id: d.id, ...d.data() })); checkNear();
+  }, () => {});
+  updLocChip();
+}
+function stopSharing(remove) {
+  if (LOC.watch !== null) navigator.geolocation.clearWatch(LOC.watch);
+  const was = LOC.watch !== null; LOC.watch = null; LOC.unsub?.(); LOC.unsub = null; LOC.last = null; LOC.lastSentPos = null;
+  if (remove && was && me.teamId) db.collection(COL.locations).doc(locKey()).delete().catch(() => {});
+  if (phase(state) !== "running") LOC.asked = false;
+  updLocChip();
+}
+function toggleSharing() {
+  SOUND.tap();
+  if (LOC.watch !== null) { store.set("loc", "off"); stopSharing(true); toast("📍 Location sharing stopped."); }
+  else startSharing();
+}
+function onPos(p) {
+  const pos = { lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy) }, now = Date.now();
+  LOC.last = pos;
+  const moved = LOC.lastSentPos ? distMeters(LOC.lastSentPos, pos) : Infinity;
+  if (now - LOC.lastSent > 8000 || moved > 10) {
+    LOC.lastSent = now; LOC.lastSentPos = pos;
+    db.collection(COL.locations).doc(locKey()).set({ name: me.name, team: me.team, teamId: me.teamId, ...pos, updatedAt: now }).catch(() => {});
+  }
+  checkNear(); updLocChip();
+}
+function onPosErr(e) {
+  if (e.code === 1) { store.set("loc", "off"); stopSharing(false); toast("📍 Location is blocked on this phone. You can still play!"); }
+}
+// ding when players from other teams come within range (quiet for the first N minutes;
+// each rival pings once, then re-arms after you separate past 1.25x the range)
+function checkNear() {
+  const ft = HUNT.proximityFeet; if (!ft || !LOC.last || LOC.last.acc > 150) return;
+  if (elapsedSec(state) < (HUNT.proximityStartMinutes || 0) * 60) return;
+  const thr = ft * .3048, now = Date.now(), fresh = [];
+  for (const o of LOC.others) {
+    if (o.teamId === me.teamId || now - (o.updatedAt || 0) > 120000 || (o.acc || 0) > 150) continue;
+    const d = distMeters(LOC.last, o);
+    if (d <= thr) {
+      if (!LOC.near[o.id] && now - (LOC.cool[o.id] || 0) > 300000) { LOC.near[o.id] = true; LOC.cool[o.id] = now; fresh.push(o); }
+    } else if (d > thr * 1.25) LOC.near[o.id] = false;
+  }
+  if (fresh.length) alertNear(fresh);
+}
+function alertNear(list) {
+  SOUND.proximity(); if (navigator.vibrate) navigator.vibrate([90, 60, 90, 60, 260]);
+  document.body.insertAdjacentHTML("beforeend", `<div class="radar"><i></i><i></i><i></i></div>`);
+  setTimeout(() => document.querySelector(".radar")?.remove(), 2600);
+  const teams = [...new Set(list.map(o => o.team))], range = fmtRange(HUNT.proximityFeet);
+  toast(list.length === 1 ? `📡 ${list[0].name} from ${list[0].team} is within ${range}!`
+    : `📡 ${list.length} rivals within ${range}: ${teams.join(", ")}`);
+}
+function proxNote() {
+  if (!HUNT.proximityFeet) return "";
+  const wait = Math.ceil(((HUNT.proximityStartMinutes || 0) * 60 - elapsedSec(state)) / 60);
+  return wait > 0 ? ` · rival alerts in ${wait} min` : ` · rival alerts on`;
+}
+setInterval(() => { if (LOC.watch !== null) updLocChip(); }, 20000);
+function updLocChip() {
+  const el = $("locChip"); if (!el) return;
+  if (!HUNT.location || !navigator.geolocation || phase(state) !== "running") return el.classList.add("hidden");
+  el.classList.remove("hidden");
+  el.innerHTML = LOC.watch !== null
+    ? `<span class="dot on"></span> Sharing location${LOC.last ? ` · ±${LOC.last.acc} m` : " · finding you…"}${proxNote()} <a class="link" onclick="toggleSharing()">Stop</a>`
+    : `<span class="dot"></span> Location off <a class="link" onclick="toggleSharing()">Share</a>`;
+}
+
 /* ---------- hunt state ---------- */
 stateRef.onSnapshot(d => { state = d.exists ? d.data({ serverTimestamps: "estimate" }) : { status: "waiting" }; render(); },
   e => { $("clock").textContent = "--:--"; });
@@ -587,14 +683,16 @@ function render() {
   if (me.name && me.teamId) $("chatBtn").classList.remove("hidden");
 
   if (ph === "ended") {
+    stopSharing(true);
     $("clock").textContent = "00:00";
     if (!endedOnce) { endedOnce = true; popQueue.length = 0; $("popup").innerHTML = ""; if (state && entered) { SFX.end(); flickerScreen(); } }
     if ($("v-gallery").classList.contains("hidden")) show("results");
     renderResults(); return;
   }
   endedOnce = false;
-  if (me.teamId && ph === "running") show("game");
+  if (me.teamId && ph === "running") { show("game"); askLocation(); }
   else {
+    stopSharing(true);
     show("landing");
     $("joinCard").classList.toggle("hidden", !!me.teamId); $("inCard").classList.toggle("hidden", !me.teamId);
     if (!me.teamId && me.name) $("playerName").value = me.name;

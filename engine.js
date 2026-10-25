@@ -7,7 +7,7 @@ const db = firebase.firestore();
 const storage = firebase.storage();
 const FV = firebase.firestore.FieldValue;
 
-const COL = { state: "state", teams: "teams", uploads: "uploads", chat: "chat", events: "events" };
+const COL = { state: "state", teams: "teams", uploads: "uploads", chat: "chat", events: "events", locations: "locations" };
 const stateRef = db.collection(COL.state).doc("main");
 
 /* ---------- helpers ---------- */
@@ -274,6 +274,15 @@ const SOUND = (() => {
     }),
 
     // old-TV static burst for the intro
+    // rival nearby: sonar-style double ping with echo
+    proximity: () => play(() => {
+      [0, .32].forEach((at, k) => {
+        synth({ f: N(k ? 88 : 83), at, dur: .9, type: "sine", vol: .32, voices: 1, a: .003, r: .85, verb: .6, delay: .5 });
+        synth({ f: N(k ? 100 : 95), at, dur: .4, type: "sine", vol: .06, voices: 1, a: .002, verb: .4 });
+      });
+      synth({ f: 90, glide: 55, at: .02, dur: .35, type: "sine", vol: .25, voices: 1, verb: .1 });
+    }),
+
     staticBurst: () => play(() => {
       noise({ dur: .75, vol: .22, type: "bandpass", f: 3200, q: .3, a: .005, verb: .2 });
       synth({ f: 60, dur: .75, type: "square", vol: .05, voices: 1, cut: 400, verb: 0 });
@@ -461,4 +470,17 @@ function drawMoon(cv, px = 360) {
     d[o + 3] = r2 > .99 ? Math.round(255 * Math.min(1, (1 - r2) / .01)) : 255;
   }
   g.putImageData(img, 0, 0);
+}
+
+/* ---------- live location helpers ---------- */
+function fmtRange(ft) {
+  if (ft === 2640) return "half a mile";
+  if (ft === 1320) return "a quarter mile";
+  return ft >= 1000 ? `${+(ft / 5280).toFixed(2)} mi` : `${ft} ft`;
+}
+const playerKey = (teamId, name) => `${teamId}__${slug(name) || "player"}`.slice(0, 90);
+function distMeters(a, b) {                     // haversine
+  const R = 6371000, toR = Math.PI / 180, dLat = (b.lat - a.lat) * toR, dLng = (b.lng - a.lng) * toR;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * toR) * Math.cos(b.lat * toR) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
 }

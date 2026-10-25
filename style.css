@@ -317,3 +317,18 @@ body.entered .hero-title .ltr{animation:tubeon 1.6s var(--d) steps(1) forwards, 
 .how-ico{font-size:28px;margin-bottom:4px}
 .how-tile b{display:block;text-transform:uppercase;letter-spacing:.06em;font-size:14px;color:var(--red2);text-shadow:0 0 8px var(--redglow)}
 .how-tile p{margin:6px 0 0;font-size:14px;color:#d8c8d2;line-height:1.4}
+
+/* ---- live location ---- */
+.loc-chip{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0 2px;padding:7px 12px;border-radius:10px;font-size:13px;color:var(--muted);
+  border:1px solid rgba(46,232,255,.3);background:rgba(46,232,255,.05)}
+.loc-chip .dot{width:9px;height:9px;border-radius:50%;background:#555;flex:none}
+.loc-chip .dot.on{background:var(--blue);box-shadow:0 0 8px var(--blue);animation:pulse 1.6s infinite}
+.loc-chip a{margin-left:auto}
+.eventbox.blue-box{border-color:var(--blue);box-shadow:0 0 10px var(--blue),0 0 50px var(--blueglow),inset 0 0 30px rgba(46,232,255,.2);animation:none}
+.eventbox.blue-box h2{-webkit-text-stroke-color:var(--blue);text-shadow:0 0 8px var(--blueglow),0 0 24px var(--blueglow);animation:none;font-size:clamp(22px,6vw,30px)}
+.eventbox.blue-box button.ghost{margin-top:8px}
+.radar{position:fixed;left:50%;top:45%;width:0;height:0;z-index:99;pointer-events:none}
+.radar i{position:absolute;left:-40px;top:-40px;width:80px;height:80px;border-radius:50%;border:3px solid var(--blue);
+  box-shadow:0 0 20px var(--blue),inset 0 0 20px var(--blueglow);animation:ping 2.2s ease-out forwards;opacity:0}
+.radar i:nth-child(2){animation-delay:.35s}.radar i:nth-child(3){animation-delay:.7s}
+@keyframes ping{0%{transform:scale(.2);opacity:1}100%{transform:scale(7);opacity:0}}

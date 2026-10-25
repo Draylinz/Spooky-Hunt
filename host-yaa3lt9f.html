@@ -6,12 +6,14 @@
 <meta name="robots" content="noindex">
 <title>Host Control</title>
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@700&family=Rubik:wght@400;500;600;700&family=VT323&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="stylesheet" href="style.css?v=5">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
-<script src="config.js?v=4"></script>
-<script src="engine.js?v=4"></script>
+<script src="config.js?v=5"></script>
+<script src="engine.js?v=5"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
 .hostgrid{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:16px;align-items:start}
 @media (max-width:960px){.hostgrid{grid-template-columns:1fr}}
@@ -29,6 +31,21 @@ h3{margin:0 0 12px;letter-spacing:.08em;text-transform:uppercase;font-size:16px;
 .chatbox{height:520px;display:flex;flex-direction:column;padding:0;overflow:hidden}
 .chatbox .chatlog{flex:1}
 details summary{cursor:pointer;font-weight:600;color:var(--blue);margin:10px 0 4px;text-shadow:0 0 6px var(--blueglow)}
+.mapcard{padding:12px}
+.maphead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.maphead h3{margin:0}
+.maphead button{width:auto;margin:0;padding:7px 12px;font-size:12px}
+#map{height:440px;border-radius:12px;border:1px solid rgba(46,232,255,.35);background:#0b0b10}
+.legend{display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:10px;font-size:13px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:11px;height:11px;border-radius:50%;display:inline-block}
+.leaflet-container{font-family:Rubik,sans-serif}
+.dark-tiles{filter:invert(1) hue-rotate(180deg) brightness(.82) contrast(.95) saturate(.6)}
+.leaflet-tooltip.pl{background:rgba(5,8,12,.85);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:6px;padding:1px 6px;font-size:11px;font-weight:600;box-shadow:none}
+.leaflet-tooltip.pl::before{display:none}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:#0d0910;color:var(--text);border:1px solid var(--blue)}
+.leaflet-popup-content{margin:10px 12px;font-size:13px}
+.leaflet-control-attribution{background:rgba(0,0,0,.6)!important;color:#888!important}.leaflet-control-attribution a{color:#aaa!important}
 </style>
 </head>
 <body>
@@ -50,6 +67,14 @@ details summary{cursor:pointer;font-weight:600;color:var(--blue);margin:10px 0 4
       <button id="waitBtn" class="ghost">↺ Back to Waiting</button>
     </div>
     <p class="small">Start gives every scheduled event a new random time. “Back to Waiting” keeps teams, points and photos.</p>
+  </div>
+
+  <div class="card blue mapcard">
+    <div class="maphead"><h3>📍 Live Map <span class="small" id="mapCount"></span></h3>
+      <button class="ghost" id="fitBtn">Center on everyone</button></div>
+    <div id="map"></div>
+    <div class="legend" id="legend"></div>
+    <p class="small" style="margin:8px 0 0">Players opt in when the hunt starts. Faded dots haven't updated in 2+ minutes (phone locked or page closed).</p>
   </div>
 
   <div class="card">
@@ -110,6 +135,51 @@ details summary{cursor:pointer;font-weight:600;color:var(--blue);margin:10px 0 4
 
 <script>
 startAsh("ash");
+
+/* ---------- live map ---------- */
+const PALETTE = ["#ff1f3d", "#2ee8ff", "#3dff8f", "#ffb21f", "#b14dff", "#ff5ec8", "#f2f2f2", "#ff8a3d", "#a3e635", "#7aa2ff"];
+let map = null, markers = {}, locs = [], userMoved = false;
+const teamColor = teamId => { const ids = [...new Set([...teams.map(t => t.id), ...locs.map(l => l.teamId)])].sort(); return PALETTE[Math.max(0, ids.indexOf(teamId)) % PALETTE.length]; };
+function ago(ms) { const s = Math.round((Date.now() - ms) / 1000); return s < 60 ? `${s}s ago` : `${Math.floor(s / 60)}m ago`; }
+function initMap() {
+  if (!window.L) { $("map").innerHTML = `<p class="small" style="padding:16px">Map couldn't load (check your connection).</p>`; return; }
+  map = L.map("map", { zoomControl: true, attributionControl: true }).setView([39.5, -98.35], 4);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19, className: "dark-tiles", attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  }).addTo(map);
+  $("fitBtn").onclick = () => { userMoved = false; fitAll(); };
+  // keep everyone in frame automatically until the host pans/zooms by hand
+  ["mousedown", "wheel", "touchstart"].forEach(ev => $("map").addEventListener(ev, () => { userMoved = true; }, { passive: true }));
+}
+function fitAll() {
+  if (!map) return; const pts = locs.map(l => [l.lat, l.lng]); if (!pts.length) return;
+  if (pts.length === 1) map.setView(pts[0], 17); else map.fitBounds(pts, { padding: [40, 40], maxZoom: 18 });
+}
+function drawMarkers() {
+  if (!map) return;
+  const now = Date.now(), seen = new Set();
+  for (const l of locs) {
+    seen.add(l.id);
+    const stale = now - (l.updatedAt || 0) > 120000, col = teamColor(l.teamId);
+    const style = { radius: 9, color: "#fff", weight: 2, fillColor: col, fillOpacity: stale ? .3 : .95, opacity: stale ? .35 : 1 };
+    const pop = `<b>${esc(l.name)}</b><br>${esc(l.team)}<br><span style="color:#aaa">±${l.acc || "?"} m · ${ago(l.updatedAt)}</span>`;
+    let m = markers[l.id];
+    if (!m) {
+      m = markers[l.id] = L.circleMarker([l.lat, l.lng], style).addTo(map);
+      m.bindTooltip(esc(l.name), { permanent: true, direction: "top", offset: [0, -10], className: "pl" });
+      m.bindPopup(pop);
+    } else { m.setLatLng([l.lat, l.lng]); m.setStyle(style); m.setPopupContent(pop); }
+  }
+  for (const id of Object.keys(markers)) if (!seen.has(id)) { map.removeLayer(markers[id]); delete markers[id]; }
+  const live = locs.filter(l => now - (l.updatedAt || 0) <= 120000).length;
+  $("mapCount").textContent = locs.length ? `· ${live} live${locs.length > live ? `, ${locs.length - live} idle` : ""}` : "· nobody sharing yet";
+  const byTeam = {}; locs.forEach(l => { (byTeam[l.teamId] ||= { name: l.team, n: 0 }).n++; });
+  $("legend").innerHTML = Object.entries(byTeam).map(([id, t]) => `<span><i style="background:${teamColor(id)};box-shadow:0 0 6px ${teamColor(id)}"></i>${esc(t.name)} (${t.n})</span>`).join("");
+  if (!userMoved && locs.length) { clearTimeout(drawMarkers.t); drawMarkers.t = setTimeout(() => { if (!userMoved) fitAll(); }, 600); }
+}
+initMap();
+db.collection(COL.locations).onSnapshot(s => { locs = s.docs.map(d => ({ id: d.id, ...d.data() })).filter(l => typeof l.lat === "number"); drawMarkers(); }, () => {});
+setInterval(drawMarkers, 15000);
 let state = null, events = {}, teams = [], tick = null;
 $("mins").value = String(HUNT.defaultMinutes);
 const toast = t => { const el = $("toast"); el.textContent = t; el.classList.add("show"); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("show"), 2500); };
@@ -202,7 +272,7 @@ $("wipeBtn").onclick = async () => {
   try {
     $("log").textContent = "Deleting photos & videos…"; await deleteFolder(storage.ref("uploads"));
     $("log").textContent = "Deleting data…";
-    for (const c of [COL.uploads, COL.chat, COL.events, COL.teams]) await clearCol(c);
+    for (const c of [COL.uploads, COL.chat, COL.events, COL.teams, COL.locations]) await clearCol(c);
     await stateRef.set({ status: "waiting", startTime: null, duration: Number($("mins").value) * 60, schedule: null });
     $("log").textContent = "✅ Wiped. Ready for a new game.";
   } catch (e) { $("log").textContent = "Error: " + e.message; }
