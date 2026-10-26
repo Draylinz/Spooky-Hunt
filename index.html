@@ -9,12 +9,12 @@
 <meta property="og:description" content="Friday night. Gather your crew. Something is waiting in the dark.">
 <meta name="theme-color" content="#060408">
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@700&family=Rubik:wght@400;500;600;700&family=VT323&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=7">
+<link rel="stylesheet" href="style.css?v=8">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
-<script src="config.js?v=7"></script>
-<script src="engine.js?v=7"></script>
+<script src="config.js?v=8"></script>
+<script src="engine.js?v=8"></script>
 </head>
 <body>
 
@@ -202,7 +202,7 @@
 </div>
 
 <!-- fullscreen gallery viewer -->
-<div class="lb hidden" id="lb" onclick="if(event.target===this||event.target.id==='lbStage'||event.target.classList.contains('lb-item'))closeLB()">
+<div class="lbx hidden" id="lb" onclick="if(event.target===this||event.target.id==='lbStage'||event.target.classList.contains('lb-item'))closeLB()">
   <div class="lb-top"><span id="lbCount"></span><button class="lb-x" onclick="closeLB()" aria-label="Close">✕</button></div>
   <div class="lb-stage" id="lbStage"></div>
   <button class="lb-arrow prev" onclick="stepLB(-1)" aria-label="Previous">‹</button>

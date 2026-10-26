@@ -425,7 +425,7 @@ body.entered .hero-title .ltr{animation:tubeon 1.6s var(--d) steps(1) forwards, 
 .g-play{position:absolute;inset:0;margin:auto;width:54px;height:54px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;
   padding-left:4px;color:#fff;background:rgba(0,0,0,.55);border:2px solid var(--blue);box-shadow:0 0 12px var(--blue);pointer-events:none}
 body.lb-open{overflow:hidden}
-.lb{position:fixed;inset:0;z-index:200;background:rgba(3,1,4,.96);display:flex;flex-direction:column;touch-action:pan-y;
+.lbx{position:fixed;inset:0;z-index:200;background:rgba(3,1,4,.96);display:flex;flex-direction:column;touch-action:pan-y;
   backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);animation:lbIn .2s ease-out}
 @keyframes lbIn{from{opacity:0}}
 .lb-top{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;padding-top:max(10px,env(safe-area-inset-top));
@@ -443,5 +443,5 @@ body.lb-open{overflow:hidden}
   background:rgba(10,3,8,.7);border:2px solid var(--blue);color:var(--blue);box-shadow:0 0 10px var(--blueglow);text-shadow:0 0 8px var(--blue)}
 .lb-arrow:active{transform:translateY(-50%) scale(.94)}
 .lb-arrow.prev{left:14px}.lb-arrow.next{right:14px}
-.lb.single .lb-arrow{display:none}
+.lbx.single .lb-arrow{display:none}
 @media (max-width:600px){.lb-arrow{width:44px;height:44px;font-size:30px;background:rgba(10,3,8,.45)}.lb-arrow.prev{left:6px}.lb-arrow.next{right:6px}.lb-stage{padding:0}}
