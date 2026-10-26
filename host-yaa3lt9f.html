@@ -6,12 +6,12 @@
 <meta name="robots" content="noindex">
 <title>Host Control</title>
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@700&family=Rubik:wght@400;500;600;700&family=VT323&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=5">
+<link rel="stylesheet" href="style.css?v=6">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
-<script src="config.js?v=5"></script>
-<script src="engine.js?v=5"></script>
+<script src="config.js?v=6"></script>
+<script src="engine.js?v=6"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
@@ -123,11 +123,14 @@ details summary{cursor:pointer;font-weight:600;color:var(--blue);margin:10px 0 4
 </div>
 
 <div class="card blue chatbox">
-  <div class="chathead"><span>💬 Group Chat (you post as HOST)</span></div>
-  <div class="chatlog" id="chatLog"></div>
-  <form class="chatform" onsubmit="event.preventDefault();sendChat('🎃 HOST','', $('chatInput').value,'host');$('chatInput').value=''">
-    <input id="chatInput" maxlength="500" placeholder="Message everyone…" autocomplete="off"><button>Send</button>
-  </form>
+  <div class="chathead"><div class="ptabs"><button id="ptChat" class="active" onclick="setPanel('chat')">💬 Chat (as HOST)</button><button id="ptBoard" onclick="setPanel('board')">🏆 Leaderboard</button></div></div>
+  <div class="pane" id="paneChat">
+    <div class="chatlog" id="chatLog"></div>
+    <form class="chatform" onsubmit="event.preventDefault();sendChat('🎃 HOST','', $('chatInput').value,'host');$('chatInput').value=''">
+      <input id="chatInput" maxlength="500" placeholder="Message everyone…" autocomplete="off"><button>Send</button>
+    </form>
+  </div>
+  <div class="pane hidden" id="paneBoard"><div class="boardwrap" id="board"></div></div>
 </div>
 </div>
 </main>
@@ -247,10 +250,17 @@ $("aSend").onclick = () => {
   $("aWhy").value = "";
 };
 
-/* teams */
+/* teams + leaderboard */
+let hostPrev = {};
+function setPanel(t) {
+  $("ptChat").classList.toggle("active", t === "chat"); $("ptBoard").classList.toggle("active", t === "board");
+  $("paneChat").classList.toggle("hidden", t !== "chat"); $("paneBoard").classList.toggle("hidden", t !== "board");
+  if (t === "chat") $("chatLog").scrollTop = 1e9;
+}
 db.collection(COL.teams).orderBy("points", "desc").onSnapshot(s => {
   teams = s.docs.map(d => ({ id: d.id, ...d.data() }));
-  $("teams").innerHTML = teams.map((t, i) => `<div class="row"><span class="rk">#${i + 1}</span><span class="nm">${esc(t.name)} <span class="small">· ${(t.members || []).length} players · ${t.decorCount || 0} decor · ${(t.done || []).length} items</span></span><span class="pt">${t.points || 0}</span></div>`).join("") || `<div class="small">No teams yet.</div>`;
+  $("teams").innerHTML = teams.map((t, i) => `<div class="row"><span class="rk">#${i + 1}</span><span class="nm">${esc(t.name)} <span class="small">· ${(t.members || []).length} players · ${(t.done || []).filter(id => ITEMS[id]).length}/${ITEM_TOTAL} found · ${(t.done || []).length} total</span></span><span class="pt">${t.points || 0}</span></div>`).join("") || `<div class="small">No teams yet.</div>`;
+  $("board").innerHTML = boardHTML(teams, null, hostPrev); hostPrev = Object.fromEntries(teams.map(t => [t.id, t.points]));
   const cur = $("aTeam").value;
   $("aTeam").innerHTML = teams.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join(""); if (cur) $("aTeam").value = cur;
 });

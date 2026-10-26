@@ -9,12 +9,12 @@
 <meta property="og:description" content="Friday night. Gather your crew. Something is waiting in the dark.">
 <meta name="theme-color" content="#060408">
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@700&family=Rubik:wght@400;500;600;700&family=VT323&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=5">
+<link rel="stylesheet" href="style.css?v=6">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
-<script src="config.js?v=5"></script>
-<script src="engine.js?v=5"></script>
+<script src="config.js?v=6"></script>
+<script src="engine.js?v=6"></script>
 </head>
 <body>
 
@@ -146,19 +146,19 @@
           <h2 class="spooky" id="teamLabel" style="margin:0;font-size:24px"></h2>
           <div><span id="myPoints" class="score-big">0</span> <span class="small">PTS</span></div>
         </div>
-        <div class="small" style="margin-top:8px"><b id="decorCount">0</b>/<span id="unlockN"></span> decorations to unlock Social</div>
-        <div class="progress"><div class="fill" id="decorFill"></div></div>
+        <div class="found-line"><span>Found <b id="foundN">0</b> of <span id="totalN">0</span></span><a class="link rank-link" id="rankLine" onclick="openPanel('board')"></a></div>
+        <div class="progress"><div class="fill" id="foundFill"></div></div>
         <div class="loc-chip hidden" id="locChip"></div>
-        <div class="tabs" id="tabs"></div>
-        <div class="small" id="catNote" style="margin:8px 2px"></div>
-        <div class="items" id="items"></div>
+        <div id="catView"><div class="cat-grid" id="catGrid"></div></div>
+        <div id="itemView" class="hidden">
+          <div class="iv-head"><button class="ghost back" onclick="closeCat()">⬅ Back</button><h3 class="spooky" id="catTitle"></h3></div>
+          <div class="small" id="catNote" style="margin:6px 2px 4px"></div>
+          <div class="tiles" id="items"></div>
+        </div>
         <p class="small center" style="margin-top:18px">Playing as <b id="pName"></b> · <a class="link" onclick="leave()">Switch team</a></p>
       </div>
     </div>
-    <aside class="card blue">
-      <h3 class="spooky" style="margin:0 0 12px;font-size:20px">🏆 Live Scores</h3>
-      <div id="board"><div class="small">No teams yet…</div></div>
-    </aside>
+    <aside id="sideSlot"></aside>
   </section>
 
   <!-- ============ RESULTS ============ -->
@@ -187,12 +187,18 @@
 <!-- CHAT -->
 <button class="chatbtn hidden" id="chatBtn" onclick="toggleChat()">💬<span class="badge hidden" id="badge">0</span></button>
 <div class="chatpanel hidden" id="chatPanel">
-  <div class="chathead"><span>💬 Group Chat</span><button onclick="toggleChat()">✕</button></div>
-  <div class="chatlog" id="chatLog"></div>
-  <form class="chatform" onsubmit="event.preventDefault();postChat()">
-    <input id="chatInput" maxlength="500" placeholder="Message everyone…" autocomplete="off">
-    <button>Send</button>
-  </form>
+  <div class="chathead">
+    <div class="ptabs"><button id="ptChat" class="active" onclick="setPanel('chat')">💬 Chat<span class="pdot hidden" id="chatDot"></span></button><button id="ptBoard" onclick="setPanel('board')">🏆 Leaderboard</button></div>
+    <button class="x" onclick="toggleChat(false)">✕</button>
+  </div>
+  <div class="pane" id="paneChat">
+    <div class="chatlog" id="chatLog"></div>
+    <form class="chatform" onsubmit="event.preventDefault();postChat()">
+      <input id="chatInput" maxlength="500" placeholder="Message everyone…" autocomplete="off">
+      <button>Send</button>
+    </form>
+  </div>
+  <div class="pane hidden" id="paneBoard"><div class="boardwrap" id="board"><div class="small">No teams yet…</div></div></div>
 </div>
 
 <div id="popup"></div>
@@ -202,11 +208,11 @@
 /* ---------- state ---------- */
 let me = { name: store.get("name"), teamId: store.get("teamId"), team: store.get("team") };
 let state = null, myTeam = null, teams = [], events = {}, myThumbs = {}, gallery = [];
-let tab = CATEGORIES[0].key, tick = null, endedOnce = false, lastLeft = null, prevPhase = null;
+let openKey = null, tick = null, endedOnce = false, lastLeft = null, prevPhase = null;
 let unsubTeam, unsubThumbs, entered = false;
 let musicOn = store.get("music") ? store.get("music") === "on" : HUNT.music !== false;
 
-document.title = HUNT.title; $("title").textContent = HUNT.title; $("unlockN").textContent = HUNT.unlockSocialAt;
+document.title = HUNT.title; $("title").textContent = HUNT.title;
 $("tagline").textContent = HUNT.tagline || ""; $("whenLabel").textContent = HUNT.whenLabel || "";
 // hero title: each letter is its own neon tube that powers on separately
 $("heroTitle").innerHTML = HUNT.title.split(" ").map(w => `<span class="word">${[...w].map(c =>
@@ -227,7 +233,7 @@ updAudioBtns();
 function deny(msg) { SOUND.error(); toast(msg); }
 
 const VIEWS = ["landing", "game", "results", "gallery"];
-function show(v) { VIEWS.forEach(x => $("v-" + x).classList.toggle("hidden", x !== v)); document.body.classList.toggle("on-landing", v === "landing"); }
+function show(v) { VIEWS.forEach(x => $("v-" + x).classList.toggle("hidden", x !== v)); document.body.classList.toggle("on-landing", v === "landing"); placePanel(); }
 function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add("show"); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("show"), 2800); }
 
 /* ---------- intro gate ---------- */
@@ -274,14 +280,13 @@ function scheduleLightning() {
 
 /* ---------- how it works ---------- */
 (function how() {
-  const n = k => CAT[k]?.items.length || 0;
   const tiles = [
-    ["🎃", "Hunt the haunts", `Track down ${n("decor")} spooky decorations around the neighborhood. 1 pt each.`],
-    ["🧟", "Dare to do it", `${n("challenge")} challenges, caught on camera. 2 pts each.`],
-    ["📱", "Post the proof", `Social posts unlock after ${HUNT.unlockSocialAt} finds. 3 pts each.`],
+    ...CATEGORIES.map(c => [c.icon, c.title, `${c.items.length} things to track down: pumpkins, skeletons, coffins, crows and more. ${c.pts} pt each.`]),
+    ["📸", "Snap it, score it", "Tap any item, upload a photo or video, and the point lands instantly."],
     ["⚡", "Expect the unexpected", "Live events hit every phone at random: curses, point steals and flash bonuses."],
     ["💬", "Talk to the dark", "The group chat is open now. Trash talk is encouraged."],
-    ["🏆", "Glory & gallery", "Most points wins. Every photo and video gets revealed at the end."]
+    ["🏆", "Live leaderboard", "Watch every team's score move in real time, right next to the chat."],
+    ["🦇", "Glory & gallery", "Most points wins. Every photo and video gets revealed at the end."]
   ];
   $("howGrid").innerHTML = tiles.map(([i, t, d]) => `<div class="how-tile"><div class="how-ico">${i}</div><b>${t}</b><p>${d}</p></div>`).join("");
 })();
@@ -336,7 +341,7 @@ async function doJoin() {
       if (snap.exists) {
         if (!confirm(`"${snap.data().name}" already exists. Join it?`)) return;
         tname = snap.data().name; await ref.update({ members: FV.arrayUnion(name) });
-      } else await ref.set({ name: tname, points: 0, done: [], decorCount: 0, members: [name], createdAt: FV.serverTimestamp() });
+      } else await ref.set({ name: tname, points: 0, done: [], members: [name], createdAt: FV.serverTimestamp() });
     } else {
       const sel = $("teamSelect"); id = sel.value; if (!id) return; tname = sel.options[sel.selectedIndex].textContent;
       await db.collection(COL.teams).doc(id).update({ members: FV.arrayUnion(name) });
@@ -365,7 +370,7 @@ function shareInvite() {
 function enter() {
   $("pName").textContent = me.name; $("teamLabel").textContent = me.team;
   $("inName").textContent = me.name; $("inTeam").textContent = me.team;
-  $("chatBtn").classList.remove("hidden");
+  placePanel();
   unsubTeam?.(); unsubThumbs?.();
   unsubTeam = db.collection(COL.teams).doc(me.teamId).onSnapshot(d => {
     if (!d.exists) { store.set("teamId"); store.set("team"); me.teamId = ""; toast("Your team was cleared by the host."); render(); return; }
@@ -376,11 +381,17 @@ function enter() {
   }, () => {});
   render();
 }
+const TOTAL = ITEM_TOTAL;
+const foundCount = t => (t?.done || []).filter(id => ITEMS[id]).length;
 function updateMine() {
   $("myPoints").textContent = myTeam.points || 0;
-  const n = myTeam.decorCount || 0;
-  $("decorCount").textContent = n; $("decorFill").style.width = Math.min(n / HUNT.unlockSocialAt * 100, 100) + "%";
-  renderItems();
+  const n = foundCount(myTeam);
+  $("foundN").textContent = n; $("totalN").textContent = TOTAL; $("foundFill").style.width = Math.min(n / TOTAL * 100, 100) + "%";
+  updRank(); renderItems();
+}
+function updRank() {
+  const i = teams.findIndex(t => t.id === me.teamId);
+  $("rankLine").textContent = i < 0 ? "🏆 Leaderboard" : `🏆 #${i + 1} of ${teams.length}`;
 }
 
 /* ---------- items ---------- */
@@ -390,50 +401,70 @@ function bonusList() {
     .sort((a, b) => b.ev.firedAtMs - a.ev.firedAtMs);
 }
 function getItem(id) { return ITEMS[id] || bonusList().find(b => b.id === id); }
-const unlocked = () => (myTeam?.decorCount || 0) >= HUNT.unlockSocialAt;
+const myFound = c => c.items.filter((_, i) => (myTeam?.done || []).includes(`${c.key}-${i}`)).length;
 
-function renderTabs() {
-  const bonuses = bonusList(), live = bonuses.some(b => b.ev.expiresAtMs > Date.now());
-  const all = [...(bonuses.length ? [{ key: "bonus", title: "⚡ Bonus" }] : []), ...CATEGORIES];
-  $("tabs").innerHTML = all.map(c => `<button class="tab ${c.key === "bonus" && live ? "bonus" : ""} ${c.key === tab ? "active" : ""}" onclick="setTab('${c.key}')">${c.title}</button>`).join("");
+function renderCats() {
+  const bonuses = bonusList(), live = bonuses.filter(b => b.ev.expiresAtMs > Date.now() && !(b.ev.firstOnly && b.ev.claimedBy));
+  const cards = CATEGORIES.map(c => {
+    const n = myFound(c), all = n === c.items.length;
+    return `<div class="catcard ${all ? "complete" : ""}" role="button" tabindex="0" onclick="openCat('${c.key}')">
+      <div class="cc-ico">${c.icon}</div>
+      <div class="cc-body"><b>${esc(c.title)}</b><span>${esc(c.tagline || "")}</span>
+        <div class="cc-meta">${n}/${c.items.length} found · ${c.pts} pt each${all ? " · ✔ COMPLETE" : ""}</div>
+        <div class="progress"><div class="fill" style="width:${n / c.items.length * 100}%"></div></div></div>
+      <div class="cc-go">›</div></div>`;
+  });
+  if (bonuses.length) cards.unshift(`<div class="catcard bonuscard ${live.length ? "live" : ""}" role="button" tabindex="0" onclick="openCat('bonus')">
+      <div class="cc-ico">⚡</div>
+      <div class="cc-body"><b>Bonus Tasks</b><span>${live.length ? `${live.length} live right now. Hurry!` : "Limited-time tasks from live events"}</span>
+        <div class="cc-meta">${bonuses.filter(b => (myTeam?.done || []).includes(b.id)).length}/${bonuses.length} done</div></div>
+      <div class="cc-go">›</div></div>`);
+  $("catGrid").innerHTML = cards.join("");
 }
-function setTab(k) { SOUND.tap(); tab = k; renderItems(); }
+function openCat(k) { SOUND.tap(); openKey = k; renderItems(); $("playCard").scrollIntoView({ behavior: "smooth", block: "start" }); }
+function closeCat() { SOUND.tap(); openKey = null; renderItems(); }
 
-function itemCard(id, name, pts, opts = {}) {
-  const done = (myTeam?.done || []).includes(id);
-  const thumbs = (myThumbs[id] || []).map(u => (u.contentType || "").startsWith("video")
-    ? `<video src="${esc(u.url)}#t=0.1" muted playsinline preload="metadata"></video>` : `<img src="${esc(u.url)}" loading="lazy" alt="">`).join("");
-  const label = opts.closedLabel || (done ? "＋ Add another (no extra pts)" : "📸 Upload photo / video");
-  return `<div class="item ${done ? "done" : ""} ${opts.locked ? "locked" : ""} ${opts.closed ? "expired" : ""} ${opts.cls || ""} ${busy.has(id) ? "busy" : ""}" data-id="${esc(id)}">
-    <div class="pts">${pts} PT${pts > 1 ? "S" : ""}${opts.extra || ""}</div>
-    <div class="name">${esc(name)}</div>
-    ${thumbs ? `<div class="thumbs">${thumbs}</div>` : ""}
-    <label class="up">${label}<input type="file" accept="image/*,video/*" ${opts.locked || opts.closed ? "disabled" : ""} onchange="onPick(this)"></label>
-    <div class="bar"><i></i></div></div>`;
+function mediaHTML(u) {
+  return (u.contentType || "").startsWith("video")
+    ? `<video src="${esc(u.url)}#t=0.1" muted playsinline preload="metadata"></video>` : `<img src="${esc(u.url)}" loading="lazy" alt="">`;
+}
+function tileHTML(id, name, pts, opts = {}) {
+  const done = (myTeam?.done || []).includes(id), ups = myThumbs[id] || [], last = ups[ups.length - 1];
+  const cta = busy.has(id) ? "⏳ Uploading…" : opts.closedLabel || (done ? "✔ Found · add more" : "📸 Tap to upload");
+  const media = last ? mediaHTML(last) : `<div class="t-ico">${opts.icon || "❔"}</div>`;
+  return `<label class="tile ${done ? "done" : ""} ${last ? "has-media" : ""} ${opts.closed ? "expired" : ""} ${opts.cls || ""} ${busy.has(id) ? "busy" : ""}" data-id="${esc(id)}">
+    <input type="file" accept="image/*,video/*" ${opts.closed ? "disabled" : ""} onchange="onPick(this)">
+    <div class="t-media">${media}</div>
+    <span class="t-pts">${done ? "✔" : "+" + pts}</span>${ups.length > 1 ? `<span class="t-count">×${ups.length}</span>` : ""}
+    ${opts.timer ? `<span class="t-timer">${opts.timer}</span>` : ""}
+    <div class="t-cap"><b>${esc(name)}</b>${opts.hint ? `<small>${esc(opts.hint)}</small>` : ""}<em>${cta}</em></div>
+    <div class="bar"><i></i></div></label>`;
 }
 const busy = new Set();
 
 function renderItems() {
   if (!myTeam) return;
-  renderTabs();
-  if (tab === "bonus") {
-    const list = bonusList();
+  renderCats();
+  const bonuses = bonusList();
+  if (openKey === "bonus" && !bonuses.length) openKey = null;
+  $("catView").classList.toggle("hidden", !!openKey); $("itemView").classList.toggle("hidden", !openKey);
+  if (!openKey) return;
+  if (openKey === "bonus") {
+    $("catTitle").textContent = "⚡ Bonus Tasks";
     $("catNote").textContent = "Limited-time tasks from live events. Be quick!";
-    $("items").innerHTML = list.map(b => {
+    $("items").innerHTML = bonuses.map(b => {
       const left = Math.max(0, Math.ceil((b.ev.expiresAtMs - Date.now()) / 1000));
       const claimed = b.ev.firstOnly && b.ev.claimedBy;
       const closed = !left || (claimed && !(myTeam.done || []).includes(b.id));
-      const extra = claimed ? ` · CLAIMED BY ${esc(b.ev.claimedBy).toUpperCase()}` : !left ? " · EXPIRED" : ` · <span data-exp="${b.ev.expiresAtMs}">${fmt(left)}</span> LEFT${b.ev.firstOnly ? " · FIRST TEAM ONLY" : ""}`;
-      return itemCard(b.id, b.name, b.pts, { cls: "bonusitem", extra, closed, closedLabel: closed ? (claimed ? "Already claimed" : "Time's up") : "" });
-    }).join("") || `<p class="small">No bonus tasks yet.</p>`;
+      const timer = claimed ? `Claimed by ${esc(b.ev.claimedBy)}` : !left ? "Expired" : `⏱ <span data-exp="${b.ev.expiresAtMs}">${fmt(left)}</span>`;
+      return tileHTML(b.id, b.name, b.pts, { icon: "⚡", cls: "bonustile", timer, hint: b.ev.firstOnly ? "First team only!" : "", closed, closedLabel: closed ? (claimed ? "Already claimed" : "Time's up") : "" });
+    }).join("");
     return;
   }
-  const c = CAT[tab]; const locked = c.locked && !unlocked();
-  const doneN = c.items.filter((_, i) => (myTeam.done || []).includes(`${c.key}-${i}`)).length;
-  $("catNote").innerHTML = `${c.pts} pt${c.pts > 1 ? "s" : ""} each · ${doneN}/${c.items.length} done`
-    + (c.key === "social" ? ` · Use <b>${esc(HUNT.hashtag)}</b>, then upload a screenshot of your post` : "")
-    + (locked ? ` · 🔒 Find ${HUNT.unlockSocialAt} decorations to unlock` : "");
-  $("items").innerHTML = c.items.map((n, i) => itemCard(`${c.key}-${i}`, n, c.pts, { locked })).join("");
+  const c = CAT[openKey];
+  $("catTitle").textContent = `${c.icon} ${c.title}`;
+  $("catNote").textContent = `${myFound(c)}/${c.items.length} found · ${c.pts} pt each · tap a square to upload a photo or video`;
+  $("items").innerHTML = c.items.map((_, i) => { const it = ITEMS[`${c.key}-${i}`]; return tileHTML(it.id, it.name, it.pts, { icon: it.icon, hint: it.hint }); }).join("");
 }
 // live countdown on bonus cards
 setInterval(() => {
@@ -451,10 +482,9 @@ function extFor(f) {
 }
 async function onPick(input) {
   const file = input.files[0]; input.value = "";
-  const id = input.closest(".item").dataset.id, item = getItem(id);
+  const id = input.closest("[data-id]").dataset.id, item = getItem(id);
   if (!file || !item || !me.teamId) return;
   if (phase(state) !== "running") return deny("The hunt isn't running right now.");
-  if (item.cat === "social" && !unlocked()) return deny(`🔒 Find ${HUNT.unlockSocialAt} decorations first.`);
   if (item.cat === "bonus" && item.ev.expiresAtMs < Date.now()) return deny("⏰ That bonus has expired.");
   if (file.size > HUNT.maxFileMB * 1048576) return deny(`File is over ${HUNT.maxFileMB} MB. Try a shorter clip.`);
 
@@ -464,7 +494,7 @@ async function onPick(input) {
   busy.add(id); renderItems();
   try {
     const task = ref.put(file, { contentType });
-    task.on("state_changed", s => { const b = document.querySelector(`.item[data-id="${CSS.escape(id)}"] .bar i`); if (b) b.style.width = s.bytesTransferred / s.totalBytes * 100 + "%"; });
+    task.on("state_changed", s => { const b = document.querySelector(`.tile[data-id="${CSS.escape(id)}"] .bar i`); if (b) b.style.width = s.bytesTransferred / s.totalBytes * 100 + "%"; });
     await task;
     const url = await ref.getDownloadURL();
 
@@ -478,16 +508,13 @@ async function onPick(input) {
       if (!t.exists) throw new Error("Team not found");
       const d = t.data();
       if ((d.done || []).includes(id)) return;
-      if (item.cat === "social" && (d.decorCount || 0) < HUNT.unlockSocialAt) return;
       if (ev) {
         const e = ev.data();
         if (Date.now() > e.expiresAtMs + 120000) return;   // 2-min grace for slow uploads
         if (e.firstOnly && e.claimedBy) return;
         if (e.firstOnly) { tx.update(evRef, { claimedBy: me.team }); firstClaim = true; }
       }
-      const upd = { points: FV.increment(item.pts), done: FV.arrayUnion(id) };
-      if (item.cat === "decor") upd.decorCount = FV.increment(1);
-      tx.update(teamRef, upd); awarded = item.pts;
+      tx.update(teamRef, { points: FV.increment(item.pts), done: FV.arrayUnion(id) }); awarded = item.pts;
     });
 
     await db.collection(COL.uploads).add({ teamId: me.teamId, teamName: me.team, by: me.name, itemId: id, itemName: item.name,
@@ -504,8 +531,8 @@ async function onPick(input) {
 let lastPts = {};
 db.collection(COL.teams).orderBy("points", "desc").onSnapshot(s => {
   teams = s.docs.map(d => ({ id: d.id, ...d.data() }));
-  $("board").innerHTML = teams.map((t, i) => `<div class="row ${t.id === me.teamId ? "me" : ""} ${lastPts[t.id] !== undefined && lastPts[t.id] !== t.points ? "bump" : ""}">
-    <span class="rk">${["🥇", "🥈", "🥉"][i] || "#" + (i + 1)}</span><span class="nm">${esc(t.name)}</span><span class="pt">${t.points || 0}</span></div>`).join("") || `<div class="small">No teams yet…</div>`;
+  $("board").innerHTML = boardHTML(teams, me.teamId, lastPts);
+  if (myTeam) updRank();
   lastPts = Object.fromEntries(teams.map(t => [t.id, t.points]));
   renderWho();
   if (phase(state) === "ended") renderResults();
@@ -544,16 +571,40 @@ function nextPopup() {
     ${e.result ? `<p class="result">${esc(e.result)}</p>` : ""}
     <button onclick="closePopup(${e.type === "bonus"})">${e.type === "bonus" ? "⚡ Go!" : "Got it"}</button></div></div>`;
 }
-function closePopup(goBonus) { SOUND.tap(); $("popup").innerHTML = ""; if (goBonus && myTeam) { tab = "bonus"; renderItems(); } nextPopup(); }
+function closePopup(goBonus) { SOUND.tap(); $("popup").innerHTML = ""; if (goBonus && myTeam) { openKey = "bonus"; renderItems(); } nextPopup(); }
 startAutoEvents(() => state, () => new Set(Object.keys(events)));
 
 /* ---------- chat ---------- */
-let chatOpen = false, unread = 0, chatSeen = null;
-function toggleChat(force) {
-  chatOpen = typeof force === "boolean" ? force : !chatOpen; $("chatPanel").classList.toggle("hidden", !chatOpen);
-  if (chatOpen) { unread = 0; updBadge(); $("chatLog").scrollTop = 1e9; setTimeout(() => $("chatInput").focus(), 50); }
+let chatOpen = false, unread = 0, chatSeen = null, panelTab = "chat";
+const dockMQ = matchMedia("(min-width:861px)");
+const isDocked = () => $("chatPanel").classList.contains("docked");
+const chatVisible = () => (isDocked() || chatOpen) && panelTab === "chat";
+// on desktop during the hunt the chat/leaderboard square sits in the right column; otherwise it floats
+function placePanel() {
+  const p = $("chatPanel"), dock = dockMQ.matches && !$("v-game").classList.contains("hidden");
+  if (dock && p.parentNode !== $("sideSlot")) $("sideSlot").appendChild(p);
+  if (!dock && p.parentNode !== document.body) document.body.appendChild(p);
+  p.classList.toggle("docked", dock);
+  p.classList.toggle("hidden", !dock && !chatOpen);
+  $("chatBtn").classList.toggle("hidden", dock || !(me.name && me.teamId));
+  if (chatVisible()) { unread = 0; updBadge(); }
 }
-function updBadge() { $("badge").textContent = unread; $("badge").classList.toggle("hidden", !unread); }
+dockMQ.addEventListener?.("change", placePanel);
+function toggleChat(force) {
+  chatOpen = typeof force === "boolean" ? force : !chatOpen; placePanel();
+  if (chatOpen && panelTab === "chat") { $("chatLog").scrollTop = 1e9; if (dockMQ.matches) setTimeout(() => $("chatInput").focus(), 50); }
+}
+function setPanel(t) {
+  SOUND.tap(); panelTab = t;
+  $("ptChat").classList.toggle("active", t === "chat"); $("ptBoard").classList.toggle("active", t === "board");
+  $("paneChat").classList.toggle("hidden", t !== "chat"); $("paneBoard").classList.toggle("hidden", t !== "board");
+  if (t === "chat") { unread = 0; updBadge(); $("chatLog").scrollTop = 1e9; }
+}
+function openPanel(t) { setPanel(t); if (!isDocked()) toggleChat(true); }
+function updBadge() {
+  $("badge").textContent = unread; $("badge").classList.toggle("hidden", !unread);
+  $("chatDot").textContent = unread; $("chatDot").classList.toggle("hidden", !unread);
+}
 function postChat() { const i = $("chatInput"); sendChat(me.name, me.team, i.value); i.value = ""; }
 listenChat(msgs => {
   const log = $("chatLog"), atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
@@ -561,7 +612,7 @@ listenChat(msgs => {
   if (atBottom || chatSeen === null) log.scrollTop = 1e9;
   const fresh = chatSeen === null ? [] : msgs.filter(m => !chatSeen.has(m.id) && !(m.name === me.name && m.team === me.team));
   chatSeen = new Set(msgs.map(m => m.id));
-  if (fresh.length && !chatOpen) { unread += fresh.length; updBadge(); }
+  if (fresh.length && !chatVisible()) { unread += fresh.length; updBadge(); }
   if (fresh.some(m => m.kind === "user" || m.kind === "host")) SFX.chat();
 });
 
@@ -680,7 +731,6 @@ function render() {
   prevPhase = ph;
   $("clock").classList.toggle("hidden", ph === "waiting");
   $("clock").classList.remove("low");
-  if (me.name && me.teamId) $("chatBtn").classList.remove("hidden");
 
   if (ph === "ended") {
     stopSharing(true);

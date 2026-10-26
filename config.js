@@ -17,7 +17,6 @@ const HUNT = {
   title: "Halloween Scavenger Hunt",
   hashtag: "#SpookyHunt2026",
   defaultMinutes: 60,
-  unlockSocialAt: 15,       // decorations needed before Social Posts unlock
   maxFileMB: 200,
 
   // Landing page (shown before the hunt starts)
@@ -33,72 +32,40 @@ const HUNT = {
   proximityStartMinutes: 15 // proximity alerts stay quiet for the first N minutes of the hunt
 };
 
-// 3) The list of things to find / do
+// 3) CATEGORIES: each one shows up as a title card in the game.
+//    Tap a card and it opens a grid of squares, one per item, each with its own upload.
+//    Items: { name, icon, hint, pts }  (pts is optional; it falls back to the category's pts)
+//    To add a new category later, copy this block, give it a new key, and list its items.
 const CATEGORIES = [
-  { key: "decor", title: "🎃 Decorations", pts: 1, items: [
-    "A carved jack-o'-lantern that's lit up",
-    "A house with only orange lights",
-    "A house with purple lights",
-    "A giant inflatable ghost",
-    "A skeleton (any size)",
-    "A 12-foot skeleton",
-    "A fake graveyard with tombstones",
-    "A witch (bonus if she crashed into a tree)",
-    "A black cat decoration",
-    "Spider webs covering bushes or a porch",
-    "A giant spider",
-    "A zombie or hand rising out of the ground",
-    "A scarecrow",
-    "A \"Keep Out\" or haunted house sign",
-    "Bats on a house or tree",
-    "A fog machine in action",
-    "A projected spooky display on a house",
-    "A light-up pumpkin (not a real one)",
-    "A coffin",
-    "A mummy",
-    "A vampire",
-    "A grim reaper",
-    "A witch's cauldron",
-    "Something creepy hanging from a tree",
-    "Frankenstein's monster",
-    "An inflatable that isn't a ghost or pumpkin",
-    "Flickering or strobe lights",
-    "A crow or raven",
-    "Glowing eyes in a window or bush",
-    "A spooky silhouette in a window",
-    "A decoration that moves or talks",
-    "A pumpkin stack or pumpkin patch display",
-    "A \"Happy Halloween\" sign",
-    "A house with a full themed display",
-    "A decoration that made you laugh"
-  ]},
-  { key: "challenge", title: "🧟 Challenges", pts: 2, items: [
-    "Do the Monster Mash in front of a decorated house",
-    "Group photo — everyone doing their scariest face",
-    "Do your best evil villain laugh (video)",
-    "Pose exactly like the decoration next to you",
-    "Say \"Happy Halloween!\" to 3 different people",
-    "Name 5 classic movie monsters without help (video)",
-    "Film a 10-second \"haunted house tour\" of the spookiest house",
-    "Re-enact a horror movie scene (keep it PG!)",
-    "Compliment a homeowner on their decorations",
-    "Photo of a teammate being \"attacked\" by a decoration",
-    "Do the Thriller dance for 10 seconds",
-    "Tell a 30-second ghost story on camera",
-    "Film a slow-motion jump scare",
-    "Photo where everyone is mid-scream"
-  ]},
-  { key: "social", title: "📱 Social", pts: 3, locked: true, items: [
-    "Post a group photo in costume",
-    "Post the scariest decoration you found",
-    "Post a boomerang of a jump scare",
-    "Post a before & after of your team getting spookier",
-    "Post a house that deserves an award (Scariest, Most Creative, Funniest)",
-    "Post a pic of everyone frozen like zombies",
-    "Post a slow-mo video of your team running from something",
-    "Post a pic captioned \"If this were my house…\"",
-    "Post your best horror-movie-poster shot",
-    "Post a video of a teammate's best scream"
+  { key: "haunts", title: "The Haunt List", icon: "🎃", tagline: "Find it. Snap it. Score it.", pts: 1, items: [
+    { name: "Pumpkin",                 icon: "🟠", hint: "Any pumpkin, carved or not" },
+    { name: "Jack-o'-Lantern",         icon: "🎃", hint: "Carved with a face" },
+    { name: "Bat",                     icon: "🦇", hint: "The flying kind, real or decor" },
+    { name: "Cobwebs",                 icon: "🕸️", hint: "Draped, stretched or real" },
+    { name: "Spider",                  icon: "🕷️", hint: "Eight legs, any size" },
+    { name: "Ghost",                   icon: "👻", hint: "Sheet, inflatable or floating" },
+    { name: "Tombstone",               icon: "🪦", hint: "Here lies your next point" },
+    { name: "Skeleton",                icon: "🦴", hint: "Full set of bones" },
+    { name: "Zombie",                  icon: "🧟", hint: "Undead and on display" },
+    { name: "Witch",                   icon: "🧙‍♀️", hint: "Hat, cackle, the works" },
+    { name: "Vampire",                 icon: "🧛", hint: "Fangs out" },
+    { name: "Scarecrow",               icon: "🌾", hint: "Straw-stuffed and staring" },
+    { name: "Cauldron",                icon: "🫕", hint: "Bonus if it's bubbling" },
+    { name: "Potions",                 icon: "🧪", hint: "Bottles, jars, mystery liquids" },
+    { name: "Mummy",                   icon: "🧻", hint: "Wrapped head to toe" },
+    { name: "Eyeball",                 icon: "👁️", hint: "Watching you back" },
+    { name: "Severed Hand or Fingers", icon: "✋", hint: "Reaching from somewhere" },
+    { name: "Brain",                   icon: "🧠", hint: "In a jar or on display" },
+    { name: "Werewolf",                icon: "🐺", hint: "Mid-howl preferred" },
+    { name: "Coffin",                  icon: "⚰️", hint: "Open or closed casket" },
+    { name: "Blood",                   icon: "🩸", hint: "Fake, please" },
+    { name: "Candles",                 icon: "🕯️", hint: "Lit, flickering, or melted" },
+    { name: "Fog Machine",             icon: "🌫️", hint: "Caught in action" },
+    { name: "Spooky Lights or Projector", icon: "📽️", hint: "Light show or projected scene" },
+    { name: "Chains",                  icon: "⛓️", hint: "Rattling optional" },
+    { name: "Crow",                    icon: "🐦‍⬛", hint: "Or a raven, real or decor" },
+    { name: "Skull",                   icon: "💀", hint: "Just the head" },
+    { name: "Witch's Broom",           icon: "🧹", hint: "Parked or mid-flight" }
   ]}
 ];
 

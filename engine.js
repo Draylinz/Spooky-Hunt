@@ -22,9 +22,23 @@ const store = {
 
 /* Item lookup for the fixed list */
 const ITEMS = {};
-CATEGORIES.forEach(c => c.items.forEach((name, i) => {
-  const id = `${c.key}-${i}`; ITEMS[id] = { id, name, cat: c.key, pts: c.pts };
+CATEGORIES.forEach(c => c.items.forEach((it, i) => {
+  const o = typeof it === "string" ? { name: it } : it, id = `${c.key}-${i}`;
+  ITEMS[id] = { id, name: o.name, icon: o.icon || c.icon, hint: o.hint || "", cat: c.key, pts: o.pts ?? c.pts };
 }));
+const ITEM_TOTAL = Object.keys(ITEMS).length;
+
+/* Live leaderboard rows (shared by player + host) */
+function boardHTML(teams, myId, prev = {}) {
+  if (!teams.length) return `<div class="small">No teams yet…</div>`;
+  return `<div class="lb-head"><span>#</span><span>Team</span><span>Found</span><span>Pts</span></div>` + teams.map((t, i) => {
+    const found = (t.done || []).filter(id => ITEMS[id]).length, bump = prev[t.id] !== undefined && prev[t.id] !== t.points;
+    return `<div class="row lb ${t.id === myId ? "me" : ""} ${i < 3 ? "top" + (i + 1) : ""} ${bump ? "bump" : ""}">
+      <span class="rk">${["🥇", "🥈", "🥉"][i] || "#" + (i + 1)}</span>
+      <span class="nm">${esc(t.name)}<small>${(t.members || []).length} player${(t.members || []).length === 1 ? "" : "s"}</small></span>
+      <span class="fd">${found}<small>/${ITEM_TOTAL}</small></span><span class="pt">${t.points || 0}</span></div>`;
+  }).join("");
+}
 const CAT = Object.fromEntries(CATEGORIES.map(c => [c.key, c]));
 const EVENT_DEFS = Object.fromEntries(EVENTS.map(e => [e.id, e]));
 
