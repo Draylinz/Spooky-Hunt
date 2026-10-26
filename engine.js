@@ -121,6 +121,7 @@ async function fireEvent(def) {
 
 // Every open page runs this; whoever gets there first fires the event.
 function startAutoEvents(getState, getFired) {
+  if (HUNT.autoEvents === false) return;
   const tried = new Set();
   setInterval(() => {
     const s = getState();

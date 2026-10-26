@@ -9,12 +9,12 @@
 <meta property="og:description" content="Friday night. Gather your crew. Something is waiting in the dark.">
 <meta name="theme-color" content="#060408">
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@700&family=Rubik:wght@400;500;600;700&family=VT323&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=6">
+<link rel="stylesheet" href="style.css?v=7">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
-<script src="config.js?v=6"></script>
-<script src="engine.js?v=6"></script>
+<script src="config.js?v=7"></script>
+<script src="engine.js?v=7"></script>
 </head>
 <body>
 
@@ -201,6 +201,15 @@
   <div class="pane hidden" id="paneBoard"><div class="boardwrap" id="board"><div class="small">No teams yet…</div></div></div>
 </div>
 
+<!-- fullscreen gallery viewer -->
+<div class="lb hidden" id="lb" onclick="if(event.target===this||event.target.id==='lbStage'||event.target.classList.contains('lb-item'))closeLB()">
+  <div class="lb-top"><span id="lbCount"></span><button class="lb-x" onclick="closeLB()" aria-label="Close">✕</button></div>
+  <div class="lb-stage" id="lbStage"></div>
+  <button class="lb-arrow prev" onclick="stepLB(-1)" aria-label="Previous">‹</button>
+  <button class="lb-arrow next" onclick="stepLB(1)" aria-label="Next">›</button>
+  <div class="lb-cap" id="lbCap"></div>
+</div>
+
 <div id="popup"></div>
 <div class="toast" id="toast"></div>
 
@@ -283,7 +292,7 @@ function scheduleLightning() {
   const tiles = [
     ...CATEGORIES.map(c => [c.icon, c.title, `${c.items.length} things to track down: pumpkins, skeletons, coffins, crows and more. ${c.pts} pt each.`]),
     ["📸", "Snap it, score it", "Tap any item, upload a photo or video, and the point lands instantly."],
-    ["⚡", "Expect the unexpected", "Live events hit every phone at random: curses, point steals and flash bonuses."],
+    ["⚡", "Expect the unexpected", "The host can drop surprise pop-ups and flash bonuses on every phone at any moment."],
     ["💬", "Talk to the dark", "The group chat is open now. Trash talk is encouraged."],
     ["🏆", "Live leaderboard", "Watch every team's score move in real time, right next to the chat."],
     ["🦇", "Glory & gallery", "Most points wins. Every photo and video gets revealed at the end."]
@@ -782,11 +791,57 @@ function renderGallery() {
   const ft = $("fTeam").value, fc = $("fCat").value;
   const list = gallery.filter(u => (!ft || u.teamId === ft) && (!fc || u.category === fc));
   $("gCount").textContent = `${list.length} submission${list.length === 1 ? "" : "s"}`;
-  $("galleryGrid").innerHTML = list.map(u => `<div class="g"><h4>${esc(u.teamName)}${u.by ? ` · ${esc(u.by)}` : ""}<span>${esc(u.itemName)}</span></h4>${
-    (u.contentType || "").startsWith("video") ? `<video src="${esc(u.url)}#t=0.1" controls playsinline preload="metadata"></video>`
-      : `<a href="${esc(u.url)}" target="_blank" rel="noopener"><img src="${esc(u.url)}" loading="lazy" alt=""></a>`}</div>`).join("")
+  galleryView = list;
+  $("galleryGrid").innerHTML = list.map((u, i) => `<div class="g"><h4>${esc(u.teamName)}${u.by ? ` · ${esc(u.by)}` : ""}<span>${esc(u.itemName)}</span></h4>
+    <div class="g-media" onclick="openLB(${i})">${(u.contentType || "").startsWith("video")
+      ? `<video src="${esc(u.url)}#t=0.1" muted playsinline preload="metadata"></video><span class="g-play">▶</span>`
+      : `<img src="${esc(u.url)}" loading="lazy" alt="">`}</div></div>`).join("")
     || `<p class="center small">Nothing here yet.</p>`;
 }
+
+/* ---------- fullscreen viewer (tap a photo; swipe or arrows to move) ---------- */
+let galleryView = [], lbIdx = -1;
+function openLB(i) {
+  if (!galleryView.length) return;
+  SOUND.tap(); lbIdx = i; $("lb").classList.remove("hidden"); document.body.classList.add("lb-open"); drawLB();
+}
+function closeLB() {
+  $("lb").classList.add("hidden"); document.body.classList.remove("lb-open"); $("lbStage").innerHTML = ""; lbIdx = -1;
+}
+function stepLB(d) {
+  if (lbIdx < 0 || galleryView.length < 2) return;
+  lbIdx = (lbIdx + d + galleryView.length) % galleryView.length; drawLB(d);
+}
+function drawLB(dir = 0) {
+  const u = galleryView[lbIdx]; if (!u) return closeLB();
+  const media = (u.contentType || "").startsWith("video")
+    ? `<video src="${esc(u.url)}" controls autoplay playsinline></video>` : `<img src="${esc(u.url)}" alt="">`;
+  $("lbStage").innerHTML = `<div class="lb-item ${dir > 0 ? "from-r" : dir < 0 ? "from-l" : ""}">${media}</div>`;
+  $("lbCap").innerHTML = `<b>${esc(u.itemName)}</b><span>${esc(u.teamName)}${u.by ? ` · ${esc(u.by)}` : ""}</span>`;
+  $("lbCount").textContent = `${lbIdx + 1} / ${galleryView.length}`;
+  $("lb").classList.toggle("single", galleryView.length < 2);
+  // warm up the neighbours so swiping feels instant
+  [1, -1].forEach(d => { const n = galleryView[(lbIdx + d + galleryView.length) % galleryView.length]; if (n && !(n.contentType || "").startsWith("video")) new Image().src = n.url; });
+}
+document.addEventListener("keydown", e => {
+  if (lbIdx < 0) return;
+  if (e.key === "ArrowRight") stepLB(1); else if (e.key === "ArrowLeft") stepLB(-1); else if (e.key === "Escape") closeLB();
+});
+(function swipe() {
+  let x0 = null, y0 = 0, t0 = 0;
+  const el = $("lbStage");
+  el.addEventListener("touchstart", e => { if (e.touches.length !== 1) return x0 = null; x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now(); }, { passive: true });
+  el.addEventListener("touchmove", e => {
+    if (x0 === null) return; const it = el.firstElementChild; if (it) it.style.transform = `translateX(${e.touches[0].clientX - x0}px)`;
+  }, { passive: true });
+  el.addEventListener("touchend", e => {
+    if (x0 === null) return; const dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0; x0 = null;
+    const it = el.firstElementChild;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) stepLB(dx < 0 ? 1 : -1);
+    else if (dy > 110 && Math.abs(dy) > Math.abs(dx) * 1.5) closeLB();
+    else if (it) { it.style.transition = "transform .2s"; it.style.transform = ""; }
+  });
+})();
 
 /* ---------- boot ---------- */
 if (me.teamId) enter(); else render();

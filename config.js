@@ -25,6 +25,7 @@ const HUNT = {
   whenLabel: "Friday night · exact time TBA",
   tagline: "Something is waiting in the dark. Gather your crew.",
   music: true,              // play the lofi soundtrack on the landing page
+  autoEvents: false,        // true = the EVENTS below fire on their own at random times. Off for now; the host can still send pop-ups and bonuses by hand.
 
   // Live location (players opt in during the hunt; only you see the map)
   location: true,           // ask players to share their location while hunting

@@ -6,12 +6,12 @@
 <meta name="robots" content="noindex">
 <title>Host Control</title>
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@700&family=Rubik:wght@400;500;600;700&family=VT323&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=6">
+<link rel="stylesheet" href="style.css?v=7">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
-<script src="config.js?v=6"></script>
-<script src="engine.js?v=6"></script>
+<script src="config.js?v=7"></script>
+<script src="engine.js?v=7"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
@@ -66,7 +66,7 @@ details summary{cursor:pointer;font-weight:600;color:var(--blue);margin:10px 0 4
       <button id="endBtn" class="purple">⏹ End Now</button>
       <button id="waitBtn" class="ghost">↺ Back to Waiting</button>
     </div>
-    <p class="small">Start gives every scheduled event a new random time. “Back to Waiting” keeps teams, points and photos.</p>
+    <p class="small">“Back to Waiting” keeps teams, points and photos.</p>
   </div>
 
   <div class="card blue mapcard">
@@ -198,7 +198,7 @@ $("startBtn").onclick = async () => {
   if (phase(state) === "running" && !confirm("A hunt is running. Restart the clock?")) return;
   const duration = Number($("mins").value) * 60;
   await clearCol(COL.events);  // so scheduled events can fire again
-  await stateRef.set({ status: "running", startTime: FV.serverTimestamp(), duration, schedule: makeSchedule(duration) });
+  await stateRef.set({ status: "running", startTime: FV.serverTimestamp(), duration, schedule: HUNT.autoEvents === false ? null : makeSchedule(duration) });
   sendChat("🎃 HOST", "", "🟢 The hunt has begun! Good luck!", "host");
 };
 $("endBtn").onclick = async () => { if (confirm("End the hunt for everyone now?")) await stateRef.set({ status: "ended" }, { merge: true }); };
@@ -220,7 +220,7 @@ stateRef.onSnapshot(d => {
 db.collection(COL.events).onSnapshot(s => { events = Object.fromEntries(s.docs.map(d => [d.id, d.data()])); renderEvents(); });
 function renderEvents() {
   const sched = state?.schedule || {}, el = elapsedSec(state), running = phase(state) === "running";
-  const fixed = EVENTS.map(e => {
+  const fixed = HUNT.autoEvents === false ? `<p class="small">Random events are <b>off</b> for now. Use the tools below to send a pop-up, launch a bonus or adjust points by hand.</p>` : EVENTS.map(e => {
     const f = events[e.id], at = sched[e.id];
     const when = f ? `<span class="tag fired">fired</span>${esc(f.result || "")}`
       : at != null && running ? `<span class="tag">in ${fmt(Math.max(0, at - el))}</span>at ${fmt(at)} into the hunt`
