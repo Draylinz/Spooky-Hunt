@@ -445,3 +445,17 @@ body.lb-open{overflow:hidden}
 .lb-arrow.prev{left:14px}.lb-arrow.next{right:14px}
 .lbx.single .lb-arrow{display:none}
 @media (max-width:600px){.lb-arrow{width:44px;height:44px;font-size:30px;background:rgba(10,3,8,.45)}.lb-arrow.prev{left:6px}.lb-arrow.next{right:6px}.lb-stage{padding:0}}
+
+/* ===== Ghost Tag ===== */
+.tag-overlay{z-index:150}
+.eventbox.tagbox{border-color:var(--purple);box-shadow:0 0 12px var(--purple),0 0 60px var(--purpleglow),inset 0 0 30px rgba(177,77,255,.2)}
+.eventbox.tagbox h2{-webkit-text-stroke-color:var(--purple)}
+.eventbox.tagbox.won{border-color:var(--green);box-shadow:0 0 12px var(--green),0 0 60px var(--greenglow)}
+.eventbox.tagbox.lost{border-color:var(--red)}
+.tag-clock{font-family:VT323,monospace;font-size:64px;line-height:1;color:var(--amber);text-shadow:0 0 10px var(--amber),0 0 30px var(--amberglow);margin:6px 0 2px}
+.tag-btn{font-size:24px;padding:20px;margin-top:10px;border-radius:16px;background:linear-gradient(180deg,#3b0a5c,#16031f);border:2px solid var(--purple);
+  box-shadow:0 0 14px var(--purple),0 0 40px var(--purpleglow),inset 0 0 18px rgba(177,77,255,.4);text-shadow:0 0 10px #fff;animation:tagpulse 1s infinite}
+.tag-btn:disabled{animation:none;opacity:.6}
+@keyframes tagpulse{50%{transform:scale(1.04);box-shadow:0 0 24px var(--purple),0 0 70px var(--purpleglow),inset 0 0 22px rgba(177,77,255,.6)}}
+.tag-safe{margin-top:12px!important;color:var(--amber)!important}
+.eventbox .result.lost{color:var(--red2);text-shadow:0 0 10px var(--red)}

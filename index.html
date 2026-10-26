@@ -9,12 +9,12 @@
 <meta property="og:description" content="Friday night. Gather your crew. Something is waiting in the dark.">
 <meta name="theme-color" content="#060408">
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@700&family=Rubik:wght@400;500;600;700&family=VT323&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=9">
+<link rel="stylesheet" href="style.css?v=10">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
-<script src="config.js?v=9"></script>
-<script src="engine.js?v=9"></script>
+<script src="config.js?v=10"></script>
+<script src="engine.js?v=10"></script>
 </head>
 <body>
 
@@ -211,6 +211,7 @@
 </div>
 
 <div id="popup"></div>
+<div id="tagBox"></div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -293,7 +294,7 @@ function scheduleLightning() {
     ...CATEGORIES.map(c => [c.icon, c.title, `${c.items.length} things to track down: pumpkins, skeletons, coffins, crows and more. ${c.pts} pt each.`]),
     ["📸", "Snap it, score it", "Tap any item, upload a photo or video, and the point lands instantly."],
     ["⚡", "Expect the unexpected", "The host can drop surprise pop-ups and flash bonuses on every phone at any moment."],
-    ["📡", "Something's close…", `Share your location and, ${HUNT.proximityStartMinutes || 0} minutes after the hunt starts, your phone pings with the name of any rival player within ${fmtRange(HUNT.proximityFeet)} of you.`],
+    ["👻", "Ghost Tag", `Share your location and, ${HUNT.proximityStartMinutes || 0} minutes in, your phone pings with the name of any rival player within ${fmtRange(HUNT.proximityFeet)}. A HAUNT THEM button lights up on both teams' phones: first to tap steals ${GT.steal} points. Passengers tap only!`],
     ["💬", "Talk to the dark", "The group chat is open now. Trash talk is encouraged."],
     ["🏆", "Glory & gallery", "Watch every team's score move live on the leaderboard. Most points wins, and every photo and video gets revealed at the end."]
   ];
@@ -562,6 +563,7 @@ let eventsLoaded = false;
 const popQueue = [];
 db.collection(COL.events).orderBy("firedAtMs").onSnapshot(s => {
   s.docChanges().forEach(ch => {
+    if (ch.doc.data()?.type === "tag") { if (ch.type !== "removed") onTag(ch.doc.id, ch.doc.data()); return; }
     if (ch.type === "removed") { delete events[ch.doc.id]; return; }
     events[ch.doc.id] = ch.doc.data();
     if (ch.type === "added" && eventsLoaded) popQueue.push(ch.doc.data());
@@ -703,6 +705,81 @@ function alertNear(list) {
   const teams = [...new Set(list.map(o => o.team))], range = fmtRange(HUNT.proximityFeet);
   toast(list.length === 1 ? `📡 ${list[0].name} from ${list[0].team} is within ${range}!`
     : `📡 ${list.length} rivals within ${range}: ${teams.join(", ")}`);
+  const byTeam = new Map(); list.forEach(o => { if (!byTeam.has(o.teamId)) byTeam.set(o.teamId, o); });
+  byTeam.forEach(o => startTag(o));
+}
+
+/* ---------- Ghost Tag: rivals in range → first team to tap steals points ---------- */
+const TAG = { id: null, ev: null, mode: null, timer: null, seen: {} };
+async function startTag(o) {
+  if (!GT.steal || !me.teamId || !o.teamId || o.teamId === me.teamId || phase(state) !== "running") return;
+  const key = [me.teamId, o.teamId].sort().join("__"), win = GT.cooldownMinutes * 60000, b = Math.floor(Date.now() / win);
+  const ref = db.collection(COL.events).doc(`tag_${key}_${b}`), prev = db.collection(COL.events).doc(`tag_${key}_${b - 1}`);
+  try {
+    await db.runTransaction(async tx => {
+      const cur = await tx.get(ref), old = await tx.get(prev);
+      if (cur.exists || (old.exists && Date.now() - old.data().firedAtMs < win)) return;   // one duel per pair of teams per cooldown
+      const now = Date.now();
+      tx.set(ref, { type: "tag", title: `👻 Ghost Tag: ${me.team} vs ${o.team}`, teams: [me.teamId, o.teamId],
+        names: { [me.teamId]: me.team, [o.teamId]: o.team }, near: { [me.teamId]: me.name, [o.teamId]: o.name || "" },
+        firedAtMs: now, expiresAtMs: now + GT.seconds * 1000, steal: GT.steal, claimedBy: null });
+    });
+  } catch (e) { console.warn("tag", e); }
+}
+function onTag(id, e) {
+  if (!me.teamId || !(e.teams || []).includes(me.teamId)) return;
+  if (e.claimedBy) { if (TAG.seen[id] !== "done" && (TAG.seen[id] || Date.now() - e.firedAtMs < 120000)) { TAG.seen[id] = "done"; showTag(id, e, e.claimedBy.split("|")[0] === me.teamId ? "won" : "lost"); } return; }
+  if (Date.now() > e.expiresAtMs || TAG.seen[id] || phase(state) !== "running") return;
+  TAG.seen[id] = "open"; showTag(id, e, "open");
+}
+function showTag(id, e, mode) {
+  clearInterval(TAG.timer); clearTimeout(TAG.close);
+  TAG.id = id; TAG.ev = e; TAG.mode = mode;
+  const rid = e.teams.find(t => t !== me.teamId), rival = esc(e.names?.[rid] || "a rival"), who = esc(e.near?.[rid] || "");
+  const amt = e.claimedBy ? +e.claimedBy.split("|")[1] || 0 : e.steal;
+  let body;
+  if (mode === "open") {
+    body = `<h2 class="spooky">👻 Ghost Tag!</h2>
+      <p>${who ? `<b>${who}</b> from ` : ""}<b>${rival}</b> is within ${fmtRange(HUNT.proximityFeet)}.</p>
+      <p>First team to tap steals <b>${e.steal} points</b>.</p>
+      <div class="tag-clock" id="tagClock">${Math.max(0, Math.ceil((e.expiresAtMs - Date.now()) / 1000))}</div>
+      <button class="tag-btn" id="tagBtn" onclick="hauntTap()">👻 HAUNT THEM</button>
+      <p class="small tag-safe">🚗 Passengers tap only. Drivers: eyes on the road.</p>`;
+    SOUND.event("bonus"); if (navigator.vibrate) navigator.vibrate([200, 80, 200]);
+    TAG.timer = setInterval(() => {
+      const s = Math.max(0, Math.ceil((e.expiresAtMs - Date.now()) / 1000)); if ($("tagClock")) $("tagClock").textContent = s;
+      if (!s && TAG.mode === "open") showTag(id, e, "faded");
+    }, 250);
+  } else if (mode === "won") {
+    body = `<h2 class="spooky">👻 You haunted ${rival}!</h2><p class="result">+${amt} POINT${amt === 1 ? "" : "S"}</p>${amt ? "" : `<p class="small">They had nothing left to steal.</p>`}<button onclick="closeTag()">Muahaha</button>`;
+    SOUND.score(true);
+  } else if (mode === "lost") {
+    body = `<h2 class="spooky">💀 ${rival} haunted you first</h2><p class="result lost">−${amt} POINT${amt === 1 ? "" : "S"}</p><button onclick="closeTag()">Next time…</button>`;
+    SOUND.event("penalty");
+  } else {
+    body = `<h2 class="spooky">The spirits fade…</h2><p>Nobody tagged in time. No points moved.</p><button onclick="closeTag()">OK</button>`;
+  }
+  if (mode !== "open") TAG.close = setTimeout(closeTag, 6000);
+  $("tagBox").innerHTML = `<div class="overlay tag-overlay"><div class="eventbox tagbox ${mode}">${body}</div></div>`;
+}
+function closeTag() { clearInterval(TAG.timer); clearTimeout(TAG.close); TAG.mode = null; $("tagBox").innerHTML = ""; }
+async function hauntTap() {
+  const id = TAG.id, e = TAG.ev; if (!id || !e || TAG.mode !== "open") return;
+  const btn = $("tagBtn"); if (btn) { btn.disabled = true; btn.textContent = "👻 Haunting…"; }
+  const rid = e.teams.find(t => t !== me.teamId);
+  const evRef = db.collection(COL.events).doc(id), mine = db.collection(COL.teams).doc(me.teamId), theirs = db.collection(COL.teams).doc(rid);
+  try {
+    const got = await db.runTransaction(async tx => {
+      const ev = await tx.get(evRef), a = await tx.get(mine), t = await tx.get(theirs), d = ev.data();
+      if (!d || d.claimedBy || Date.now() > d.expiresAtMs + 3000 || !a.exists) return -1;
+      const amt = t.exists ? Math.min(d.steal || GT.steal, t.data().points || 0) : 0;
+      tx.update(evRef, { claimedBy: `${me.teamId}|${amt}` });
+      if (amt) { tx.update(theirs, { points: FV.increment(-amt) }); tx.update(mine, { points: FV.increment(amt) }); }
+      return amt;
+    });
+    if (got >= 0) sendChat("", "", `👻 ${me.team} haunted ${e.names?.[rid] || "a rival"} and stole ${got} point${got === 1 ? "" : "s"}!`, "feed");
+    else if (TAG.mode === "open") showTag(id, e, "faded");
+  } catch (err) { console.error(err); deny("Couldn't tag: " + (err.code || err.message)); if (btn) { btn.disabled = false; btn.textContent = "👻 HAUNT THEM"; } }
 }
 function proxNote() {
   if (!HUNT.proximityFeet) return "";
@@ -744,7 +821,7 @@ function render() {
   if (ph === "ended") {
     stopSharing(true);
     $("clock").textContent = "00:00";
-    if (!endedOnce) { endedOnce = true; popQueue.length = 0; $("popup").innerHTML = ""; if (state && entered) { SFX.end(); flickerScreen(); } }
+    if (!endedOnce) { endedOnce = true; popQueue.length = 0; $("popup").innerHTML = ""; closeTag(); if (state && entered) { SFX.end(); flickerScreen(); } }
     if ($("v-gallery").classList.contains("hidden")) show("results");
     renderResults(); return;
   }

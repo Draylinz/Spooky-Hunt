@@ -27,6 +27,7 @@ CATEGORIES.forEach(c => c.items.forEach((it, i) => {
   ITEMS[id] = { id, name: o.name, icon: o.icon || c.icon, hint: o.hint || "", cat: c.key, pts: o.pts ?? c.pts };
 }));
 const ITEM_TOTAL = Object.keys(ITEMS).length;
+const GT = Object.assign({ steal: 3, seconds: 60, cooldownMinutes: 10 }, HUNT.ghostTag || {});
 
 /* Live leaderboard rows (shared by player + host) */
 function boardHTML(teams, myId, prev = {}) {

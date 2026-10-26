@@ -6,12 +6,12 @@
 <meta name="robots" content="noindex">
 <title>Host Control</title>
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@700&family=Rubik:wght@400;500;600;700&family=VT323&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=9">
+<link rel="stylesheet" href="style.css?v=10">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
-<script src="config.js?v=9"></script>
-<script src="engine.js?v=9"></script>
+<script src="config.js?v=10"></script>
+<script src="engine.js?v=10"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
@@ -229,7 +229,14 @@ function renderEvents() {
       <button class="purple" ${f ? "disabled" : ""} onclick="fire(EVENT_DEFS['${e.id}'])">Fire now</button></div>`;
   }).join("");
   const custom = Object.entries(events).filter(([id]) => !EVENT_DEFS[id]).sort((a, b) => a[1].firedAtMs - b[1].firedAtMs)
-    .map(([, e]) => `<div class="evrow"><div class="info"><b>${esc(e.title || e.task)}</b><span class="small"><span class="tag fired">custom</span>${esc(e.result || e.text || "")}</span></div></div>`).join("");
+    .map(([, e]) => {
+      if (e.type === "tag") {
+        const [w, amt] = (e.claimedBy || "").split("|"), l = (e.teams || []).find(t => t !== w);
+        const res = e.claimedBy ? `${e.names?.[w] || w} stole ${amt} from ${e.names?.[l] || l}` : Date.now() > e.expiresAtMs ? "Nobody tagged in time" : "Live now…";
+        return `<div class="evrow"><div class="info"><b>${esc(e.title)}</b><span class="small"><span class="tag fired">ghost tag</span>${esc(res)}</span></div></div>`;
+      }
+      return `<div class="evrow"><div class="info"><b>${esc(e.title || e.task)}</b><span class="small"><span class="tag fired">custom</span>${esc(e.result || e.text || "")}</span></div></div>`;
+    }).join("");
   $("evList").innerHTML = fixed + custom;
 }
 $("cSend").onclick = () => {
