@@ -9,12 +9,12 @@
 <meta property="og:description" content="Friday night. Gather your crew. Something is waiting in the dark.">
 <meta name="theme-color" content="#060408">
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@700&family=Rubik:wght@400;500;600;700&family=VT323&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=11">
+<link rel="stylesheet" href="style.css?v=12">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
-<script src="config.js?v=11"></script>
-<script src="engine.js?v=11"></script>
+<script src="config.js?v=12"></script>
+<script src="engine.js?v=12"></script>
 </head>
 <body>
 
@@ -291,8 +291,7 @@ function scheduleLightning() {
 /* ---------- how it works ---------- */
 (function how() {
   const tiles = [
-    ...CATEGORIES.map(c => [c.icon, c.title, `${c.items.length} things to track down: pumpkins, skeletons, coffins, crows and more. ${c.pts} pt each.`]),
-    ["📸", "Snap it, score it", "Tap any item, upload a photo or video, and the point lands instantly."],
+    ...CATEGORIES.map(c => [c.icon, c.title, c.how || `${c.items.length} to find. ${c.pts} pt${c.pts === 1 ? "" : "s"} each.`]),
     ["⚡", "Expect the unexpected", "The host can drop surprise pop-ups and flash bonuses on every phone at any moment."],
     ["👻", "Ghost Tag", `Share your location and, ${HUNT.proximityStartMinutes || 0} minutes in, your phone pings with the name of any rival player within ${fmtRange(HUNT.proximityFeet)}. A HAUNT THEM button lights up on both teams' phones: first to tap steals ${GT.steal} points. Passengers tap only!`],
     ["💬", "Talk to the dark", "The group chat is open now. Trash talk is encouraged."],
@@ -420,7 +419,7 @@ function renderCats() {
     return `<div class="catcard ${all ? "complete" : ""}" role="button" tabindex="0" onclick="openCat('${c.key}')">
       <div class="cc-ico">${c.icon}</div>
       <div class="cc-body"><b>${esc(c.title)}</b><span>${esc(c.tagline || "")}</span>
-        <div class="cc-meta">${n}/${c.items.length} found · ${c.pts} pt each${all ? " · ✔ COMPLETE" : ""}</div>
+        <div class="cc-meta">${n}/${c.items.length} found · ${c.pts} pt${c.pts === 1 ? "" : "s"}${c.items.length > 1 ? " each" : ""}${all ? " · ✔ COMPLETE" : ""}</div>
         <div class="progress"><div class="fill" style="width:${n / c.items.length * 100}%"></div></div></div>
       <div class="cc-go">›</div></div>`;
   });
@@ -473,7 +472,7 @@ function renderItems() {
   }
   const c = CAT[openKey];
   $("catTitle").textContent = `${c.icon} ${c.title}`;
-  $("catNote").textContent = `${myFound(c)}/${c.items.length} found · ${c.pts} pt each · tap a square to upload a photo or video`;
+  $("catNote").textContent = `${myFound(c)}/${c.items.length} found · ${c.pts} pt${c.pts === 1 ? "" : "s"}${c.items.length > 1 ? " each" : ""} · tap a square to upload a photo or video`;
   $("items").innerHTML = c.items.map((_, i) => { const it = ITEMS[`${c.key}-${i}`]; return tileHTML(it.id, it.name, it.pts, { icon: it.icon, hint: it.hint }); }).join("");
 }
 // live countdown on bonus cards

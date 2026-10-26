@@ -40,7 +40,8 @@ const HUNT = {
 //    Items: { name, icon, hint, pts }  (pts is optional; it falls back to the category's pts)
 //    To add a new category later, copy this block, give it a new key, and list its items.
 const CATEGORIES = [
-  { key: "haunts", title: "The Haunt List", icon: "🎃", tagline: "Find it. Snap it. Score it.", pts: 1, items: [
+  { key: "haunts", title: "The Haunt List", icon: "🎃", tagline: "Find it. Snap it. Score it.", pts: 1,
+    how: "28 things to track down: pumpkins, skeletons, coffins, crows and more. Tap one, upload a photo or video, and the point lands instantly. 1 pt each.", items: [
     { name: "Pumpkin",                 icon: "🟠", hint: "Any pumpkin, carved or not" },
     { name: "Jack-o'-Lantern",         icon: "🎃", hint: "Carved with a face" },
     { name: "Bat",                     icon: "🦇", hint: "The flying kind, real or decor" },
@@ -69,6 +70,10 @@ const CATEGORIES = [
     { name: "Crow",                    icon: "🐦‍⬛", hint: "Or a raven, real or decor" },
     { name: "Skull",                   icon: "💀", hint: "Just the head" },
     { name: "Witch's Broom",           icon: "🧹", hint: "Parked or mid-flight" }
+  ]},
+  { key: "costume", title: "Team Costume", icon: "🎭", tagline: "Suit up. Squad up. Strike a pose.", pts: 3,
+    how: "Dress up as a team and upload one group photo in costume during the hunt. Worth 3 pts.", items: [
+    { name: "Team Costume Pic", icon: "🧛", hint: "The whole team, in costume, one photo" }
   ]}
 ];
 
