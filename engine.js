@@ -7,7 +7,7 @@ const db = firebase.firestore();
 const storage = firebase.storage();
 const FV = firebase.firestore.FieldValue;
 
-const COL = { state: "state", teams: "teams", uploads: "uploads", chat: "chat", events: "events", locations: "locations" };
+const COL = { state: "state", teams: "teams", uploads: "uploads", chat: "chat", events: "events", locations: "locations", votes: "votes", awards: "awards" };
 const stateRef = db.collection(COL.state).doc("main");
 
 /* ---------- helpers ---------- */
@@ -278,8 +278,71 @@ const SOUND = (() => {
     prerender(steps) { init(); mInit(); mBus.gain.value = .9; for (let i = 0; i < steps; i++) mPlayStep(i, .1 + i * S16); return .1 + steps * S16; }
   };
 
+  // ---------- finale: retro synth-arpeggio suspense track (original composition) ----------
+  let fBus, fPlaying = false, fTimer = null, fNext = 0, fStep = 0, fT0 = 0, fDrums = false;
+  const F16 = 60 / 92 / 4;
+  const FPROG = [[48, 52, 55, 59], [52, 55, 59, 62], [45, 48, 52, 55], [41, 45, 48, 52]];   // Cmaj7  Em7  Am7  Fmaj7
+  const FARP = [0, 1, 2, 3, 2, 1, 2, 3, 0, 2, 1, 3, 2, 3, 1, 2];
+  function fInit() {
+    if (fBus) return;
+    fBus = ctx.createGain(); fBus.gain.value = 0;
+    const send = ctx.createGain(); send.gain.value = .35;
+    fBus.connect(master); fBus.connect(send).connect(verbIn);
+  }
+  function fPlayStep(s, t) {
+    const bar = Math.floor(s / 16) % 4, pos = s % 16, ch = FPROG[bar], bus = fBus;
+    const open = Math.min(1, Math.max(0, (t - fT0) / 11));            // filter slowly opens = rising tension
+    synth({ f: N(ch[FARP[pos]] + 12), t0: t, dur: F16 * 1.15, type: "sawtooth", vol: .055, voices: 2, detune: 7, cut: 450 + open * 2800, q: 8, a: .003, r: F16 * .9, bus, verb: 0, delay: .2 });
+    if (pos % 2 === 0) synth({ f: N(ch[0] - 12), t0: t, dur: F16 * 1.8, type: "sawtooth", vol: .1, voices: 2, detune: 9, cut: 260 + open * 500, q: 5, a: .004, r: F16, bus, verb: 0 });
+    if (pos === 0) ch.forEach(n => synth({ f: N(n), t0: t, dur: F16 * 16 + .4, vol: .018, voices: 3, detune: 12, cut: 800, a: .6, r: 1.2, bus, verb: 0 }));
+    if (pos === 0 || pos === 8) synth({ f: 62, glide: 40, t0: t, dur: .4, type: "sine", vol: fDrums ? .55 : .3, voices: 1, a: .002, r: .35, bus, verb: 0 });   // heartbeat kick
+    if (pos === 3 && !fDrums) synth({ f: 58, glide: 40, t0: t, dur: .3, type: "sine", vol: .18, voices: 1, a: .002, r: .25, bus, verb: 0 });
+    if (fDrums) {
+      if (pos === 4 || pos === 12) noise({ t0: t, dur: .22, vol: .2, type: "bandpass", f: 1800, q: .7, a: .002, bus, verb: 0 });
+      if (pos % 2 === 0) noise({ t0: t, dur: .035, vol: pos % 4 ? .03 : .05, type: "highpass", f: 7500, a: .001, bus, verb: 0 });
+    }
+  }
+  function fSchedule() {
+    if (fNext < ctx.currentTime - .3) fNext = ctx.currentTime + .05;
+    while (fNext < ctx.currentTime + .3) { fPlayStep(fStep, fNext); fStep++; fNext += F16; }
+  }
+  const finale = {
+    get playing() { return fPlaying; },
+    start() {
+      if (fPlaying || muted) return; init(); fInit(); fPlaying = true; fStep = 0; fNext = ctx.currentTime + .1; fT0 = fNext; fDrums = false;
+      const t = ctx.currentTime; fBus.gain.cancelScheduledValues(t); fBus.gain.setValueAtTime(0, t); fBus.gain.linearRampToValueAtTime(.95, t + 2.5);
+      fTimer = setInterval(fSchedule, 60); fSchedule();
+    },
+    drop() { fDrums = true; fT0 = -99; },
+    stop(fade = 1.5) {
+      if (!fPlaying) return; fPlaying = false; clearInterval(fTimer);
+      const t = ctx.currentTime; fBus.gain.cancelScheduledValues(t); fBus.gain.setValueAtTime(fBus.gain.value, t); fBus.gain.linearRampToValueAtTime(0, t + fade);
+    }
+  };
+
   return {
-    init, N, music,
+    init, N, music, finale,
+
+    // building drum roll for the big reveal
+    drumroll: (sec = 4) => play(() => {
+      const n = Math.floor(sec * 16);
+      for (let i = 0; i < n; i++) { const k = i / n; noise({ at: k * sec, dur: .07, vol: .05 + .2 * k * k, type: "bandpass", f: 1500 + k * 900, q: .8, a: .002, verb: .25 }); }
+      noise({ dur: sec, vol: .14, type: "highpass", f: 300, fEnd: 7000, q: .7, a: sec * .95, verb: .5 });
+    }),
+
+    // winner reveal: impact + bright major stab + sparkle
+    reveal: () => play(() => {
+      synth({ f: 70, glide: 30, dur: 2.2, type: "sine", vol: .7, voices: 1, verb: .4 });
+      noise({ dur: 1.8, vol: .35, type: "lowpass", f: 1400, fEnd: 120, a: .004, verb: .9 });
+      [48, 55, 60, 64, 67, 71, 76].forEach(n => synth({ f: N(n), dur: 3, vol: .06, voices: 3, detune: 12, cut: 4000, cutEnd: 900, q: 3, a: .01, r: 2.2, verb: .7 }));
+      [72, 76, 79, 83, 84, 88, 91, 96].forEach((n, i) => synth({ f: N(n), at: .25 + i * .07, dur: .5, type: "square", vol: .045, voices: 1, cut: 5000, delay: .45, verb: .5 }));
+    }),
+
+    // a single vote cast
+    vote: () => play(() => {
+      synth({ f: N(84), dur: .08, type: "square", vol: .14, cut: 4000, voices: 1, verb: .2 });
+      synth({ f: N(91), at: .06, dur: .18, type: "triangle", vol: .16, voices: 1, delay: .4, verb: .3 });
+    }),
     get muted() { return muted; },
     setMuted(m) { muted = m; store.set("muted", m ? "1" : ""); if (master) master.gain.value = m ? 0 : .85; },
 
@@ -500,6 +563,62 @@ function fmtRange(ft) {
   return ft >= 1000 ? `${+(ft / 5280).toFixed(2)} mi` : `${ft} ft`;
 }
 const playerKey = (teamId, name) => `${teamId}__${slug(name) || "player"}`.slice(0, 90);
+
+/* ---------- end-of-game finale: shared timeline, polls and awards ---------- */
+const FIN = Object.assign({ pollSeconds: 45, pts: 2, introSeconds: 10, resultSeconds: 7, emptySeconds: 5, suspenseSeconds: 12, polls: [] },
+  typeof FINALE === "object" ? FINALE : {});
+const tsMs = t => t?.toMillis ? t.toMillis() : (typeof t === "number" ? t : null);
+function huntEndMs(s) {
+  if (!s) return null;
+  const e = tsMs(s.endedAt); if (e) return e;
+  const st = tsMs(s.startTime); return st && s.duration ? st + s.duration * 1000 : null;
+}
+const runOf = s => String(tsMs(s?.startTime) || "x");
+function pollCands(poll, uploads, endAt) {
+  const late = endAt ? endAt + 20000 : Infinity;   // uploads that finish long after the buzzer don't count
+  return uploads.filter(u => (tsMs(u.createdAt) ?? 0) <= late &&
+    (poll.item ? u.itemId === poll.item : poll.video ? (u.contentType || "").startsWith("video") : false));
+}
+// every phone builds the same schedule from the moment the clock hit zero
+function finaleTimeline(s, uploads) {
+  const t0 = huntEndMs(s); if (!t0) return [];
+  const segs = []; let t = t0;
+  const push = (kind, sec, extra = {}) => { segs.push({ kind, start: t, end: t + sec * 1000, ...extra }); t += sec * 1000; };
+  push("intro", FIN.introSeconds);
+  FIN.polls.forEach((p, i) => {
+    const cands = pollCands(p, uploads, t0);
+    if (cands.length) { push("poll", FIN.pollSeconds, { poll: p, idx: i, cands }); push("result", FIN.resultSeconds, { poll: p, idx: i, cands }); }
+    else push("empty", FIN.emptySeconds, { poll: p, idx: i, cands });
+  });
+  push("suspense", FIN.suspenseSeconds);
+  segs.push({ kind: "reveal", start: t, end: Infinity });
+  return segs;
+}
+const finaleAt = (segs, now = Date.now()) => segs.find(g => now < g.end) || segs[segs.length - 1];
+function tallyVotes(votes, pollKey, closeMs) {
+  const c = {};
+  votes.forEach(v => { if (v.poll === pollKey && (!closeMs || (v.at || 0) <= closeMs + 2000)) c[v.uploadId] = (c[v.uploadId] || 0) + 1; });
+  return c;
+}
+// pays out a poll exactly once, no matter how many phones try
+async function awardPoll(s, seg, votes) {
+  const run = runOf(s), ref = db.collection(COL.awards).doc(`${run}_${seg.poll.key}`);
+  const counts = tallyVotes(votes, seg.poll.key, seg.start);
+  const max = Math.max(0, ...seg.cands.map(c => counts[c.id] || 0));
+  const win = max ? seg.cands.filter(c => (counts[c.id] || 0) === max) : [];
+  const teamIds = [...new Set(win.map(c => c.teamId))];
+  let names = null;
+  await db.runTransaction(async tx => {
+    names = null;
+    const a = await tx.get(ref); if (a.exists) return;
+    const snaps = await Promise.all(teamIds.map(id => tx.get(db.collection(COL.teams).doc(id))));
+    const ok = snaps.filter(x => x.exists);
+    names = ok.map(x => x.data().name);
+    tx.set(ref, { run, poll: seg.poll.key, title: seg.poll.title, winners: win.map(c => c.id), teams: names, votes: max, at: Date.now() });
+    ok.forEach(x => tx.update(x.ref, { points: FV.increment(FIN.pts) }));
+  });
+  if (names) sendChat("", "", names.length ? `🏆 ${seg.poll.title}: ${names.join(" & ")} +${FIN.pts}!` : `🗳 ${seg.poll.title}: no votes, no points.`, "feed");
+}
 function distMeters(a, b) {                     // haversine
   const R = 6371000, toR = Math.PI / 180, dLat = (b.lat - a.lat) * toR, dLng = (b.lng - a.lng) * toR;
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * toR) * Math.cos(b.lat * toR) * Math.sin(dLng / 2) ** 2;

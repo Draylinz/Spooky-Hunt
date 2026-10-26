@@ -47,6 +47,22 @@ service cloud.firestore {
                             && request.resource.data.keys().hasOnly(['name', 'team', 'teamId', 'lat', 'lng', 'acc', 'updatedAt']);
     }
 
+    // End-of-game votes (one doc per player per poll; can't vote for your own team)
+    match /votes/{id} {
+      allow read, delete: if true;
+      allow create, update: if request.resource.data.keys().hasOnly(['run', 'poll', 'voter', 'voterTeam', 'uploadId', 'forTeam', 'at'])
+                            && request.resource.data.voter is string
+                            && request.resource.data.voter.size() <= 40
+                            && request.resource.data.voterTeam is string
+                            && request.resource.data.voterTeam != request.resource.data.forTeam;
+    }
+
+    // Poll payouts (written once per poll; the same transaction adds the points)
+    match /awards/{id} {
+      allow read, delete: if true;
+      allow create: if request.resource.data.keys().hasOnly(['run', 'poll', 'title', 'winners', 'teams', 'votes', 'at']);
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

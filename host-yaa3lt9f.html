@@ -6,12 +6,12 @@
 <meta name="robots" content="noindex">
 <title>Host Control</title>
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@700&family=Rubik:wght@400;500;600;700&family=VT323&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=12">
+<link rel="stylesheet" href="style.css?v=13">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
-<script src="config.js?v=12"></script>
-<script src="engine.js?v=12"></script>
+<script src="config.js?v=13"></script>
+<script src="engine.js?v=13"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
@@ -109,6 +109,11 @@ details summary{cursor:pointer;font-weight:600;color:var(--blue);margin:10px 0 4
   </div>
 
   <div class="card">
+    <h3>🗳 End-of-game voting</h3>
+    <div id="finHost" class="small">Starts automatically when the clock hits zero.</div>
+  </div>
+
+  <div class="card">
     <h3>🏆 Teams <span class="small" id="upCount"></span></h3>
     <div id="teams"><div class="small">No teams yet.</div></div>
     <p class="small">Player page: <a class="link" href="./" target="_blank">open</a></p>
@@ -198,11 +203,15 @@ $("startBtn").onclick = async () => {
   if (phase(state) === "running" && !confirm("A hunt is running. Restart the clock?")) return;
   const duration = Number($("mins").value) * 60;
   await clearCol(COL.events);  // so scheduled events can fire again
-  await stateRef.set({ status: "running", startTime: FV.serverTimestamp(), duration, schedule: HUNT.autoEvents === false ? null : makeSchedule(duration) });
+  await stateRef.set({ status: "running", startTime: FV.serverTimestamp(), endedAt: null, duration, schedule: HUNT.autoEvents === false ? null : makeSchedule(duration) });
   sendChat("🎃 HOST", "", "🟢 The hunt has begun! Good luck!", "host");
 };
-$("endBtn").onclick = async () => { if (confirm("End the hunt for everyone now?")) await stateRef.set({ status: "ended" }, { merge: true }); };
-$("waitBtn").onclick = () => stateRef.set({ status: "waiting", startTime: null, duration: Number($("mins").value) * 60, schedule: null });
+$("endBtn").onclick = async () => {
+  if (!confirm("End the hunt for everyone now? The end-of-game voting starts right away.")) return;
+  // endedAt starts the finale clock; don't reset it if the hunt already ended on its own
+  await stateRef.set(phase(state) === "running" ? { status: "ended", endedAt: FV.serverTimestamp() } : { status: "ended" }, { merge: true });
+};
+$("waitBtn").onclick = () => stateRef.set({ status: "waiting", startTime: null, endedAt: null, duration: Number($("mins").value) * 60, schedule: null });
 
 stateRef.onSnapshot(d => {
   state = d.exists ? d.data({ serverTimestamps: "estimate" }) : { status: "waiting" };
@@ -271,7 +280,37 @@ db.collection(COL.teams).orderBy("points", "desc").onSnapshot(s => {
   const cur = $("aTeam").value;
   $("aTeam").innerHTML = teams.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join(""); if (cur) $("aTeam").value = cur;
 });
-db.collection(COL.uploads).onSnapshot(s => $("upCount").textContent = `· ${s.size} uploads`);
+let hUploads = [], hVotes = [], hAwards = {}, hRun = null, hUnsub = [], hTried = {};
+db.collection(COL.uploads).onSnapshot(s => {
+  $("upCount").textContent = `· ${s.size} uploads`;
+  hUploads = s.docs.map(d => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) })).sort((a, b) => (tsMs(a.createdAt) || 0) - (tsMs(b.createdAt) || 0));
+});
+
+/* end-of-game voting monitor (the host page also pays out polls, so it works even if no player has the page open) */
+$("finHost").textContent = `Starts automatically the moment the clock hits zero: ${FIN.polls.map(p => p.icon + " " + p.title).join(", ")}. ${FIN.pollSeconds} s each, +${FIN.pts} pts to the winner.`;
+function hostFinale() {
+  if (phase(state) !== "ended") { hRun = null; hUnsub.forEach(u => u()); hUnsub = []; return; }
+  const run = runOf(state);
+  if (hRun !== run) {
+    hUnsub.forEach(u => u()); hUnsub = []; hRun = run; hVotes = []; hAwards = {}; hTried = {};
+    hUnsub.push(db.collection(COL.votes).where("run", "==", run).onSnapshot(s => hVotes = s.docs.map(d => d.data())));
+    hUnsub.push(db.collection(COL.awards).where("run", "==", run).onSnapshot(s => hAwards = Object.fromEntries(s.docs.map(d => [d.data().poll, d.data()]))));
+  }
+  const segs = finaleTimeline(state, hUploads); if (!segs.length) return;
+  const g = finaleAt(segs), left = Math.max(0, Math.ceil((g.end - Date.now()) / 1000));
+  if (g.kind === "result" && !hTried[g.poll.key]) { hTried[g.poll.key] = 1; setTimeout(() => { if (!hAwards[g.poll.key]) awardPoll(state, g, hVotes).catch(e => console.warn(e)); }, 2500); }
+  const now = { intro: `Intro screen · first poll in ${left}s`, poll: `Poll ${(g.idx ?? 0) + 1}: ${g.poll?.title} · ${left}s left`, result: `Showing the ${g.poll?.title} winner`,
+    empty: `${g.poll?.title}: no entries, skipping`, suspense: `Suspense build-up · reveal in ${left}s`, reveal: "🏆 Winner revealed. Gallery is open." }[g.kind];
+  const polls = FIN.polls.map(p => {
+    const seg = segs.find(x => x.poll?.key === p.key), counts = tallyVotes(hVotes, p.key), a = hAwards[p.key];
+    const top = (seg?.cands || []).map(c => [c, counts[c.id] || 0]).sort((x, y) => y[1] - x[1]).slice(0, 3)
+      .map(([c, n]) => `${esc(c.teamName)} (${n})`).join(" · ");
+    const res = a ? (a.teams.length ? `🏆 ${esc(a.teams.join(" & "))} +${FIN.pts}` : "no votes") : seg?.cands.length ? (top || "no votes yet") : "no entries";
+    return `<div class="evrow"><div class="info"><b>${p.icon} ${esc(p.title)}</b><span class="small">${seg?.cands.length || 0} entries · ${res}${a ? "" : ""}</span></div></div>`;
+  }).join("");
+  $("finHost").innerHTML = `<p style="margin:0 0 10px"><span class="tag fired">live</span>${now}</p>${polls}`;
+}
+setInterval(hostFinale, 1000);
 
 /* chat */
 listenChat(msgs => { const log = $("chatLog"); log.innerHTML = msgs.map(m => chatHTML(m, { name: "🎃 HOST", team: "" })).join(""); log.scrollTop = 1e9; });
@@ -289,7 +328,7 @@ $("wipeBtn").onclick = async () => {
   try {
     $("log").textContent = "Deleting photos & videos…"; await deleteFolder(storage.ref("uploads"));
     $("log").textContent = "Deleting data…";
-    for (const c of [COL.uploads, COL.chat, COL.events, COL.teams, COL.locations]) await clearCol(c);
+    for (const c of [COL.uploads, COL.chat, COL.events, COL.teams, COL.locations, COL.votes, COL.awards]) await clearCol(c);
     await stateRef.set({ status: "waiting", startTime: null, duration: Number($("mins").value) * 60, schedule: null });
     $("log").textContent = "✅ Wiped. Ready for a new game.";
   } catch (e) { $("log").textContent = "Error: " + e.message; }

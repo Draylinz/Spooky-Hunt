@@ -9,12 +9,12 @@
 <meta property="og:description" content="Friday night. Gather your crew. Something is waiting in the dark.">
 <meta name="theme-color" content="#060408">
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@700&family=Rubik:wght@400;500;600;700&family=VT323&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=12">
+<link rel="stylesheet" href="style.css?v=13">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
-<script src="config.js?v=12"></script>
-<script src="engine.js?v=12"></script>
+<script src="config.js?v=13"></script>
+<script src="engine.js?v=13"></script>
 </head>
 <body>
 
@@ -162,25 +162,25 @@
   </section>
 
   <!-- ============ RESULTS ============ -->
-  <section id="v-results" class="card hidden" style="max-width:720px;margin:20px auto;text-align:center">
-    <h2 class="spooky" style="font-size:22px;margin:0;">The hunt is over!</h2>
-    <div class="winner" id="winner"></div>
-    <div id="finalBoard" style="text-align:left"></div>
-    <button onclick="openGallery()">🦇 View the Gallery</button>
-  </section>
-
-  <!-- ============ GALLERY ============ -->
-  <section id="v-gallery" class="hidden">
-    <div class="card center">
-      <h2 class="spooky" style="font-size:28px;margin:0 0 8px;">All Submissions</h2>
-      <div class="filters">
-        <select id="fTeam" onchange="renderGallery()"></select>
-        <select id="fCat" onchange="renderGallery()"></select>
+  <section id="v-results" class="hidden">
+    <div id="finale"><div class="card fin-card center"><p class="small">Summoning the results…</p></div></div>
+    <div id="afterReveal" class="hidden">
+      <div class="card center gal-head">
+        <h2 class="spooky" style="font-size:30px;margin:0 0 6px;">The Gallery</h2>
+        <p class="small" style="margin:0 0 10px">Every photo and video from tonight. Tap one to go fullscreen.</p>
+        <div class="filters">
+          <select id="fTeam" onchange="renderGallery()"></select>
+          <select id="fItem" onchange="renderGallery()"></select>
+        </div>
+        <p class="small" id="gCount"></p>
       </div>
-      <p class="small" id="gCount"></p>
-      <button class="ghost" style="max-width:300px" onclick="show('results')">⬅ Back to results</button>
+      <div class="gallery" id="galleryGrid"></div>
+      <footer class="thanks">
+        <div class="thanks-ico">🎃</div>
+        <h2 class="spooky">Thank you for haunting</h2>
+        <p>We'll see you next year…</p>
+      </footer>
     </div>
-    <div class="gallery" id="galleryGrid"></div>
   </section>
 </main>
 
@@ -212,6 +212,7 @@
 
 <div id="popup"></div>
 <div id="tagBox"></div>
+<div id="finFx"></div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -233,7 +234,13 @@ setTimeout(() => { const el = $("moonCv"); drawMoon(el, Math.min(400, Math.round
 function toggleMute() { SOUND.setMuted(!SOUND.muted); updAudioBtns(); if (!SOUND.muted) SOUND.tap(); }
 function toggleMusic() {
   musicOn = !musicOn; store.set("music", musicOn ? "on" : "off"); updAudioBtns();
-  if (musicOn) SOUND.music.start(); else SOUND.music.stop(.8);
+  if (musicOn) resumeMusic(); else { SOUND.music.stop(.8); SOUND.finale.stop(.8); }
+}
+// the lofi loop plays before/after the hunt; the synth track takes over for the finale's suspense + reveal
+function resumeMusic() {
+  if (!entered || !musicOn) return;
+  if (phase(state) === "ended" && ["suspense", "reveal"].includes(FINS.seg?.kind)) { SOUND.music.stop(.5); SOUND.finale.start(); if (FINS.seg.kind === "reveal") SOUND.finale.drop(); }
+  else if (phase(state) !== "running") SOUND.music.start();
 }
 function updAudioBtns() {
   $("muteBtn").textContent = SOUND.muted ? "🔇" : "🔊";
@@ -242,7 +249,7 @@ function updAudioBtns() {
 updAudioBtns();
 function deny(msg) { SOUND.error(); toast(msg); }
 
-const VIEWS = ["landing", "game", "results", "gallery"];
+const VIEWS = ["landing", "game", "results"];
 function show(v) { VIEWS.forEach(x => $("v-" + x).classList.toggle("hidden", x !== v)); document.body.classList.toggle("on-landing", v === "landing"); placePanel(); }
 function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add("show"); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("show"), 2800); }
 
@@ -260,7 +267,7 @@ function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add(
     setTimeout(() => { lightning(true); }, 420);
     setTimeout(() => {
       $("gate").classList.add("gone"); document.body.classList.add("entered"); entered = true;
-      if (musicOn && phase(state) !== "running") SOUND.music.start();
+      resumeMusic();
       setTimeout(() => { run = false; $("gate").remove(); }, 1400);
       scheduleLightning();
     }, 800);
@@ -544,7 +551,7 @@ db.collection(COL.teams).orderBy("points", "desc").onSnapshot(s => {
   if (myTeam) updRank();
   lastPts = Object.fromEntries(teams.map(t => [t.id, t.points]));
   renderWho();
-  if (phase(state) === "ended") renderResults();
+  if (phase(state) === "ended") tickFinale();
 }, e => { $("board").innerHTML = `<div class="err">Can't reach the game (${esc(e.code)}).</div>`; });
 
 function renderWho() {
@@ -801,8 +808,8 @@ stateRef.onSnapshot(d => { state = d.exists ? d.data({ serverTimestamps: "estima
 
 // pause the soundtrack when the tab is in the background
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) SOUND.music.stop(.3);
-  else if (entered && musicOn && phase(state) !== "running") SOUND.music.start();
+  if (document.hidden) { SOUND.music.stop(.3); SOUND.finale.stop(.3); }
+  else resumeMusic();
 });
 
 function render() {
@@ -811,7 +818,7 @@ function render() {
   // soundtrack follows the game: off while hunting, back on before/after
   if (prevPhase && prevPhase !== ph && entered) {
     if (ph === "running") SOUND.music.stop(2);
-    else if (musicOn) setTimeout(() => { if (phase(state) !== "running") SOUND.music.start(); }, ph === "ended" ? 7000 : 0);
+    else if (musicOn) setTimeout(resumeMusic, ph === "ended" ? 7000 : 0);
   }
   prevPhase = ph;
   $("clock").classList.toggle("hidden", ph === "waiting");
@@ -821,10 +828,9 @@ function render() {
     stopSharing(true);
     $("clock").textContent = "00:00";
     if (!endedOnce) { endedOnce = true; popQueue.length = 0; $("popup").innerHTML = ""; closeTag(); if (state && entered) { SFX.end(); flickerScreen(); } }
-    if ($("v-gallery").classList.contains("hidden")) show("results");
-    renderResults(); return;
+    show("results"); startFinale(); return;
   }
-  endedOnce = false;
+  endedOnce = false; stopFinale();
   if (me.teamId && ph === "running") { show("game"); askLocation(); }
   else {
     stopSharing(true);
@@ -847,37 +853,182 @@ function render() {
   step(); if (ph === "running") tick = setInterval(step, 1000);
 }
 
-/* ---------- results + gallery ---------- */
-function renderResults() {
-  const [first, ...rest] = teams;
-  $("winner").textContent = first ? `🏆 ${first.name}: ${first.points || 0} pts` : "No teams played 👻";
-  $("finalBoard").innerHTML = rest.map((t, i) => `<div class="row ${t.id === me.teamId ? "me" : ""}"><span class="rk">#${i + 2}</span><span class="nm">${esc(t.name)}</span><span class="pt">${t.points || 0}</span></div>`).join("");
+/* ---------- end-of-game finale: intro → 3 polls → suspense → reveal → gallery ---------- */
+const FINS = { run: null, unsub: [], uploads: [], votes: [], awards: {}, ready: false, timer: null, key: "", seg: null, myVotes: {}, tried: {}, podSig: "", rolled: false, susLine: -1 };
+function startFinale() {
+  const run = runOf(state);
+  if (FINS.run !== run) {
+    FINS.unsub.forEach(u => u()); FINS.unsub = []; FINS.run = run; FINS.ready = false; FINS.key = ""; FINS.myVotes = {}; FINS.tried = {}; FINS.votes = []; FINS.awards = {};
+    FINS.unsub.push(db.collection(COL.uploads).onSnapshot(s => {
+      FINS.uploads = s.docs.map(d => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) })).sort((a, b) => (tsMs(a.createdAt) || 0) - (tsMs(b.createdAt) || 0));
+      FINS.ready = true; buildFilters(); renderGallery(); tickFinale();
+    }, () => {}));
+    FINS.unsub.push(db.collection(COL.votes).where("run", "==", run).onSnapshot(s => { FINS.votes = s.docs.map(d => d.data()); tickFinale(); }, () => {}));
+    FINS.unsub.push(db.collection(COL.awards).where("run", "==", run).onSnapshot(s => { FINS.awards = Object.fromEntries(s.docs.map(d => [d.data().poll, d.data()])); tickFinale(); }, () => {}));
+  }
+  clearInterval(FINS.timer); FINS.timer = setInterval(tickFinale, 250); tickFinale();
 }
-async function openGallery() {
-  show("gallery"); $("galleryGrid").innerHTML = `<p class="center small">Summoning photos…</p>`;
+function stopFinale() {
+  clearInterval(FINS.timer); FINS.unsub.forEach(u => u()); FINS.unsub = []; FINS.run = null; FINS.key = ""; FINS.seg = null; $("finFx").innerHTML = "";
+  SOUND.finale.stop(1); document.body.classList.remove("fin-dark");
+}
+const candMedia = (c, cls = "") => (c.contentType || "").startsWith("video")
+  ? `<video class="${cls}" src="${esc(c.url)}#t=0.1" muted playsinline preload="metadata"></video><span class="g-play">▶</span>`
+  : `<img class="${cls}" src="${esc(c.url)}" loading="lazy" alt="">`;
+const teamName = id => teams.find(t => t.id === id)?.name;
+const myVoteFor = key => FINS.myVotes[key] || FINS.votes.find(v => v.poll === key && v.voterTeam === me.teamId && v.voter === me.name)?.uploadId;
+
+function tickFinale() {
+  if (phase(state) !== "ended" || !FINS.ready) return;
+  const segs = finaleTimeline(state, FINS.uploads); if (!segs.length) return;
+  const g = finaleAt(segs), key = `${g.kind}:${g.poll?.key || ""}:${g.cands?.length || 0}`;
+  FINS.seg = g;
+  if (key !== FINS.key) { const live = !!FINS.key && Date.now() - g.start < 4000; FINS.key = key; enterStage(g, live); }
+  updateStage(g);
+}
+function enterStage(g, live) {
+  const P = FIN.polls.length, el = $("finale");
+  document.body.classList.toggle("fin-dark", g.kind === "suspense");
+  if (g.kind !== "suspense") $("finFx").innerHTML = "";
+  $("afterReveal").classList.toggle("hidden", g.kind !== "reveal");
+  if (g.kind === "intro") {
+    el.innerHTML = `<div class="card fin-card center fin-intro">
+      <div class="fin-kicker">⏰ Time's up</div>
+      <h2 class="spooky fin-big">The hunt is over…</h2>
+      <p class="fin-sub">…but the night isn't. There are still points up for grabs.</p>
+      <div class="fin-steps">${FIN.polls.map((p, i) => `<div class="fin-step" style="--d:${.3 + i * .25}s"><span>${p.icon}</span><b>${esc(p.title)}</b><i>+${FIN.pts}</i></div>`).join("")}</div>
+      <p class="small">Vote for your favorite in each poll. You can't vote for your own team.</p>
+      <div class="fin-count">First poll opens in <b id="finCount"></b></div></div>`;
+  } else if (g.kind === "poll") {
+    const p = g.poll;
+    el.innerHTML = `<div class="card fin-card fin-poll">
+      <div class="center"><div class="fin-kicker">Poll ${g.idx + 1} of ${P} · winner gets +${FIN.pts}</div>
+      <h2 class="spooky fin-big">${p.icon} ${esc(p.title)}</h2><p class="fin-sub">${esc(p.blurb || "")}</p></div>
+      <div class="fin-timer"><b id="finCount"></b><div class="fin-bar"><i id="finBar"></i></div></div>
+      <p class="small center" id="finNote"></p>
+      <div class="fin-cands">${g.cands.map((c, i) => `<div class="cand ${c.teamId === me.teamId ? "mine" : ""}" data-up="${esc(c.id)}">
+        <div class="cand-media" onclick="openLB(${i},'p')">${candMedia(c)}</div>
+        <div class="cand-info"><b>${esc(c.teamName)}</b><span>${p.video ? esc(c.itemName) + " · " : ""}${esc(c.by || "")}</span></div>
+        <div class="cand-votes"><div class="vbar"><i></i></div><span class="vn">0</span></div>
+        <button class="cand-btn" onclick="castVote('${esc(c.id)}')">🗳 Vote</button></div>`).join("")}</div></div>`;
+    if (live) SOUND.event("bonus");
+  } else if (g.kind === "result") {
+    el.innerHTML = `<div class="card fin-card center fin-result"><div class="fin-kicker">${g.poll.icon} ${esc(g.poll.title)}</div><div id="finResult"></div></div>`;
+    if (!FINS.tried[g.poll.key]) { FINS.tried[g.poll.key] = 1; setTimeout(() => { if (!FINS.awards[g.poll.key]) awardPoll(state, g, FINS.votes).catch(e => console.warn("award", e)); }, 1500 + Math.random() * 1500); }
+  } else if (g.kind === "empty") {
+    el.innerHTML = `<div class="card fin-card center fin-result"><div class="fin-kicker">${g.poll.icon} ${esc(g.poll.title)}</div>
+      <h2 class="spooky fin-big">No entries 👻</h2><p class="fin-sub">Nobody submitted one tonight. On to the next…</p></div>`;
+  } else if (g.kind === "suspense") {
+    FINS.rolled = false; FINS.susLine = -1;
+    el.innerHTML = `<div class="card fin-card center"><p class="small">The final reveal is coming…</p></div>`;
+    $("finFx").innerHTML = `<div class="fin-suspense"><div class="fin-sus-glow"></div><div class="fin-sus-text" id="susText"></div><div class="fin-sus-bar"><i id="susBar"></i></div></div>`;
+    if (musicOn && entered) { SOUND.music.stop(1); SOUND.finale.start(); }
+  } else if (g.kind === "reveal") {
+    FINS.podSig = "";
+    el.innerHTML = `<div class="card fin-card center fin-reveal ${live ? "live" : ""}"><div class="fin-kicker">🏆 ${esc(HUNT.title)}</div><div id="podium"></div>
+      <a class="scroll-hint" onclick="$('afterReveal').scrollIntoView({behavior:'smooth'})">Scroll down for the gallery ↓</a></div>`;
+    if (live) {
+      SOUND.reveal(); lightning(false); flickerScreen(); confetti();
+      if (musicOn && entered) { SOUND.music.stop(.5); SOUND.finale.start(); SOUND.finale.drop(); }
+    }
+  }
+  window.scrollTo({ top: 0, behavior: live ? "smooth" : "auto" });
+}
+function updateStage(g) {
+  const left = Math.max(0, Math.ceil((g.end - Date.now()) / 1000));
+  if (g.kind === "intro") { if ($("finCount")) $("finCount").textContent = left; }
+  else if (g.kind === "poll") {
+    $("finCount").textContent = left; $("finBar").style.width = Math.max(0, (g.end - Date.now()) / (g.end - g.start) * 100) + "%";
+    $("finCount").classList.toggle("low", left <= 10);
+    const counts = tallyVotes(FINS.votes, g.poll.key), total = Object.values(counts).reduce((a, b) => a + b, 0), mine = myVoteFor(g.poll.key);
+    const canVote = !!me.teamId && g.cands.some(c => c.teamId !== me.teamId);
+    $("finNote").textContent = !me.teamId ? "Only players on a team can vote. Watch the votes roll in!"
+      : !canVote ? "Every entry here is from your team, so you can't vote in this one. Fingers crossed!"
+      : mine ? "Vote locked in. You can switch it until the timer runs out." : "Tap Vote on your favorite. You can't vote for your own team.";
+    document.querySelectorAll(".cand").forEach(el => {
+      const id = el.dataset.up, n = counts[id] || 0, own = el.classList.contains("mine"), btn = el.querySelector(".cand-btn");
+      el.querySelector(".vn").textContent = `${n} vote${n === 1 ? "" : "s"}`;
+      el.querySelector(".vbar i").style.width = (total ? n / total * 100 : 0) + "%";
+      el.classList.toggle("voted", mine === id);
+      btn.disabled = own || !me.teamId; btn.classList.toggle("hidden", !me.teamId);
+      btn.textContent = own ? "Your team" : mine === id ? "✔ Your vote" : "🗳 Vote";
+    });
+  } else if (g.kind === "result") {
+    const a = FINS.awards[g.poll.key], el = $("finResult"), sig = a ? JSON.stringify(a.winners) : "wait";
+    if (el.dataset.sig === sig) return; el.dataset.sig = sig;
+    if (!a) { el.innerHTML = `<h2 class="spooky fin-big">Counting votes…</h2><div class="fin-spin">🕯️</div>`; return; }
+    if (!a.winners.length) { el.innerHTML = `<h2 class="spooky fin-big">No votes cast</h2><p class="fin-sub">Nobody scores this one.</p>`; return; }
+    const w = g.cands.find(c => c.id === a.winners[0]);
+    el.innerHTML = `${w ? `<div class="res-media">${candMedia(w).replace("<video ", "<video autoplay loop ")}</div>` : ""}
+      <h2 class="spooky fin-big">🏆 ${esc(a.teams.join(" & "))}</h2>
+      <p class="result">+${FIN.pts} POINTS</p><p class="small">${a.votes} vote${a.votes === 1 ? "" : "s"}${a.winners.length > 1 ? " · it's a tie!" : ""}</p>`;
+    if (a.teams.includes(me.team)) SOUND.score(true); else SOUND.vote();
+  } else if (g.kind === "suspense") {
+    const el = (Date.now() - g.start) / 1000, total = (g.end - g.start) / 1000;
+    const lines = [[0, "Tallying the final scores…"], [3, "Counting every scream…"], [6, "Checking for curses…"], [total - 4, "And the winner is…"]];
+    let li = 0; lines.forEach(([t], i) => { if (el >= t) li = i; });
+    if (li !== FINS.susLine) {
+      FINS.susLine = li; const t = $("susText"); t.textContent = lines[li][1]; t.classList.remove("in"); void t.offsetWidth; t.classList.add("in");
+      if (li) flickerScreen();
+    }
+    $("susBar").style.width = Math.min(100, el / total * 100) + "%";
+    if (!FINS.rolled && el >= total - 4.2) { FINS.rolled = true; SOUND.drumroll(4); }
+  } else if (g.kind === "reveal") {
+    const sig = teams.map(t => t.id + ":" + t.points).join("|");
+    if (sig === FINS.podSig) return; FINS.podSig = sig;
+    const [a, b, c, ...rest] = teams, row = t => `<span class="p-name">${esc(t.name)}</span><span class="p-pts">${t.points || 0} pts</span>`;
+    $("podium").innerHTML = !a ? `<h2 class="spooky fin-big">No teams played 👻</h2>` : `
+      <div class="pod-1 ${a.id === me.teamId ? "me" : ""}"><div class="crown">👑</div><div class="pod-label">Winner</div>${row(a)}
+        <div class="p-members">${(a.members || []).map(esc).join(" · ")}</div></div>
+      <div class="pod-rest">${[b, c].filter(Boolean).map((t, i) => `<div class="pod-${i + 2} ${t.id === me.teamId ? "me" : ""}"><span class="medal">${["🥈", "🥉"][i]}</span>${row(t)}</div>`).join("")}</div>
+      ${rest.length ? `<div class="pod-more">${rest.map((t, i) => `<div class="row ${t.id === me.teamId ? "me" : ""}"><span class="rk">#${i + 4}</span><span class="nm">${esc(t.name)}</span><span class="pt">${t.points || 0}</span></div>`).join("")}</div>` : ""}`;
+  }
+}
+async function castVote(uid) {
+  const g = FINS.seg; if (!g || g.kind !== "poll" || Date.now() > g.end || !me.teamId) return;
+  const c = g.cands.find(x => x.id === uid); if (!c) return;
+  if (c.teamId === me.teamId) return deny("You can't vote for your own team 👻");
+  SOUND.vote(); FINS.myVotes[g.poll.key] = uid; updateStage(g);
+  const run = runOf(state);
   try {
-    gallery = (await db.collection(COL.uploads).orderBy("createdAt").get()).docs.map(d => d.data());
-    const tm = [...new Map(gallery.map(u => [u.teamId, u.teamName])).entries()];
-    $("fTeam").innerHTML = `<option value="">All teams</option>` + tm.map(([id, n]) => `<option value="${esc(id)}">${esc(n)}</option>`).join("");
-    $("fCat").innerHTML = `<option value="">All categories</option>` + [...CATEGORIES, { key: "bonus", title: "⚡ Bonus" }].map(c => `<option value="${c.key}">${c.title}</option>`).join("");
-    renderGallery();
-  } catch (e) { $("galleryGrid").innerHTML = `<p class="err center">Couldn't load gallery: ${esc(e.message)}</p>`; }
+    await db.collection(COL.votes).doc(`${run}_${g.poll.key}_${playerKey(me.teamId, me.name)}`)
+      .set({ run, poll: g.poll.key, voter: me.name, voterTeam: me.teamId, uploadId: uid, forTeam: c.teamId, at: Date.now() });
+  } catch (e) { delete FINS.myVotes[g.poll.key]; deny("Vote didn't go through: " + (e.code || e.message)); }
+}
+function confetti() {
+  const box = document.createElement("div"); box.className = "confetti";
+  box.innerHTML = Array.from({ length: 46 }, () => `<i style="left:${Math.random() * 100}%;animation-delay:${(Math.random() * 1.6).toFixed(2)}s;animation-duration:${(3.2 + Math.random() * 2.5).toFixed(2)}s;font-size:${(18 + Math.random() * 22) | 0}px">${["🎃", "🦇", "👻", "🕸️", "🍬", "💀"][Math.random() * 6 | 0]}</i>`).join("");
+  document.body.appendChild(box); setTimeout(() => box.remove(), 7500);
+}
+
+/* ---------- gallery (after the reveal): filter by team or item ---------- */
+let galleryList = [];
+function buildFilters() {
+  const ft = $("fTeam").value, fi = $("fItem").value, ups = FINS.uploads;
+  const tm = [...new Map(ups.map(u => [u.teamId, u.teamName])).entries()].sort((a, b) => String(a[1]).localeCompare(b[1]));
+  $("fTeam").innerHTML = `<option value="">All teams</option>` + tm.map(([id, n]) => `<option value="${esc(id)}">${esc(n)}</option>`).join("");
+  const have = new Set(ups.map(u => u.itemId));
+  const groups = CATEGORIES.map(c => [c.title, c.items.map((_, i) => `${c.key}-${i}`).filter(id => have.has(id)).map(id => [id, ITEMS[id].name])])
+    .concat([["⚡ Bonus tasks", [...new Map(ups.filter(u => u.category === "bonus").map(u => [u.itemId, u.itemName])).entries()]]]);
+  $("fItem").innerHTML = `<option value="">All items</option><option value="@video">🎬 Videos only</option>` +
+    groups.filter(([, l]) => l.length).map(([t, l]) => `<optgroup label="${esc(t)}">${l.map(([id, n]) => `<option value="${esc(id)}">${esc(n)}</option>`).join("")}</optgroup>`).join("");
+  if ([...$("fTeam").options].some(o => o.value === ft)) $("fTeam").value = ft;
+  if ([...$("fItem").options].some(o => o.value === fi)) $("fItem").value = fi;
 }
 function renderGallery() {
-  const ft = $("fTeam").value, fc = $("fCat").value;
-  const list = gallery.filter(u => (!ft || u.teamId === ft) && (!fc || u.category === fc));
+  const ft = $("fTeam").value, fi = $("fItem").value;
+  const list = FINS.uploads.filter(u => (!ft || u.teamId === ft) && (!fi || (fi === "@video" ? (u.contentType || "").startsWith("video") : u.itemId === fi)));
   $("gCount").textContent = `${list.length} submission${list.length === 1 ? "" : "s"}`;
-  galleryView = list;
+  galleryList = list;
   $("galleryGrid").innerHTML = list.map((u, i) => `<div class="g"><h4>${esc(u.teamName)}${u.by ? ` · ${esc(u.by)}` : ""}<span>${esc(u.itemName)}</span></h4>
-    <div class="g-media" onclick="openLB(${i})">${(u.contentType || "").startsWith("video")
-      ? `<video src="${esc(u.url)}#t=0.1" muted playsinline preload="metadata"></video><span class="g-play">▶</span>`
-      : `<img src="${esc(u.url)}" loading="lazy" alt="">`}</div></div>`).join("")
+    <div class="g-media" onclick="openLB(${i},'g')">${candMedia(u)}</div></div>`).join("")
     || `<p class="center small">Nothing here yet.</p>`;
 }
 
 /* ---------- fullscreen viewer (tap a photo; swipe or arrows to move) ---------- */
 let galleryView = [], lbIdx = -1;
-function openLB(i) {
+function openLB(i, which = "g") {
+  galleryView = which === "p" ? (FINS.seg?.cands || []) : galleryList;
   if (!galleryView.length) return;
   SOUND.tap(); lbIdx = i; $("lb").classList.remove("hidden"); document.body.classList.add("lb-open"); drawLB();
 }

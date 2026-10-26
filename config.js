@@ -77,7 +77,20 @@ const CATEGORIES = [
   ]}
 ];
 
-/* 4) LIVE EVENTS
+/* 4) END-OF-GAME VOTING
+   When the clock hits zero, every player votes in these polls (45 s each, can't vote for your own team).
+   The winning team of each poll gets FINALE.pts. item = which Haunt List square feeds the poll; video: true = every video. */
+const FINALE = {
+  pollSeconds: 45,
+  pts: 2,
+  polls: [
+    { key: "costume", title: "Best Costume",         icon: "🎭", item: "costume-0", blurb: "Which team nailed the look?" },
+    { key: "video",   title: "Best Video",           icon: "🎬", video: true,       blurb: "Every clip from tonight. Pick the best one." },
+    { key: "jack",    title: "Best Jack-o'-Lantern", icon: "🎃", item: "haunts-1",  blurb: "Judge the carving, not just the find." }
+  ]
+};
+
+/* 5) LIVE EVENTS
    Each one fires ONCE at a random moment inside its window.
    window: [start, end] as a fraction of the hunt (0 = start, 1 = end).
    e.g. [0.2, 0.5] = somewhere between 20% and 50% of the way through.
