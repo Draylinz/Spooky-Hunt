@@ -29,8 +29,8 @@ const HUNT = {
 
   // Live location (players opt in during the hunt; only you see the map)
   location: true,           // ask players to share their location while hunting
-  proximityFeet: 2640,      // ding both phones when players from different teams get this close (2640 ft = half a mile; 0 = off)
-  proximityStartMinutes: 15 // proximity alerts stay quiet for the first N minutes of the hunt
+  proximityFeet: 5280,      // ding both phones when players from different teams get this close (5280 ft = 1 mile; 0 = off)
+  proximityStartMinutes: 10 // proximity alerts stay quiet for the first N minutes of the hunt
 };
 
 // 3) CATEGORIES: each one shows up as a title card in the game.

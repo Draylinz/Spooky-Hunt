@@ -489,6 +489,7 @@ function drawMoon(cv, px = 360) {
 
 /* ---------- live location helpers ---------- */
 function fmtRange(ft) {
+  if (ft === 5280) return "a mile";
   if (ft === 2640) return "half a mile";
   if (ft === 1320) return "a quarter mile";
   return ft >= 1000 ? `${+(ft / 5280).toFixed(2)} mi` : `${ft} ft`;
