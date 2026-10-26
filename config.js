@@ -31,6 +31,7 @@ const HUNT = {
   location: true,           // ask players to share their location while hunting
   proximityFeet: 5280,      // ding both phones when players from different teams get this close (5280 ft = 1 mile; 0 = off)
   ghostTag: { steal: 3, seconds: 60, cooldownMinutes: 10 }, // when rivals are in range: first team to tap "HAUNT THEM" steals points (steal: 0 = off)
+  proximityTestStartSeconds: 15, // in a short test round (5 minutes or less) alerts start after this many seconds instead
   proximityStartMinutes: 10 // proximity alerts stay quiet for the first N minutes of the hunt
 };
 

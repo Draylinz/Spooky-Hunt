@@ -489,6 +489,10 @@ function drawMoon(cv, px = 360) {
 }
 
 /* ---------- live location helpers ---------- */
+// seconds into the hunt before rival alerts / Ghost Tag switch on (short test rounds use a 15 s delay)
+function proxDelaySec(s) {
+  return (s?.duration || 0) > 0 && s.duration <= 300 ? (HUNT.proximityTestStartSeconds ?? 15) : (HUNT.proximityStartMinutes || 0) * 60;
+}
 function fmtRange(ft) {
   if (ft === 5280) return "a mile";
   if (ft === 2640) return "half a mile";

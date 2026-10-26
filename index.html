@@ -9,12 +9,12 @@
 <meta property="og:description" content="Friday night. Gather your crew. Something is waiting in the dark.">
 <meta name="theme-color" content="#060408">
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@700&family=Rubik:wght@400;500;600;700&family=VT323&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=10">
+<link rel="stylesheet" href="style.css?v=11">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
-<script src="config.js?v=10"></script>
-<script src="engine.js?v=10"></script>
+<script src="config.js?v=11"></script>
+<script src="engine.js?v=11"></script>
 </head>
 <body>
 
@@ -687,7 +687,7 @@ function onPosErr(e) {
 // each rival pings once, then re-arms after you separate past 1.25x the range)
 function checkNear() {
   const ft = HUNT.proximityFeet; if (!ft || !LOC.last || LOC.last.acc > 150) return;
-  if (elapsedSec(state) < (HUNT.proximityStartMinutes || 0) * 60) return;
+  if (elapsedSec(state) < proxDelaySec(state)) return;
   const thr = ft * .3048, now = Date.now(), fresh = [];
   for (const o of LOC.others) {
     if (o.teamId === me.teamId || now - (o.updatedAt || 0) > 120000 || (o.acc || 0) > 150) continue;
@@ -783,10 +783,10 @@ async function hauntTap() {
 }
 function proxNote() {
   if (!HUNT.proximityFeet) return "";
-  const wait = Math.ceil(((HUNT.proximityStartMinutes || 0) * 60 - elapsedSec(state)) / 60);
-  return wait > 0 ? ` · rival alerts in ${wait} min` : ` · rival alerts on`;
+  const left = proxDelaySec(state) - elapsedSec(state);
+  return left > 0 ? ` · rival alerts in ${left < 60 ? left + " s" : Math.ceil(left / 60) + " min"}` : ` · rival alerts on`;
 }
-setInterval(() => { if (LOC.watch !== null) updLocChip(); }, 20000);
+setInterval(() => { if (LOC.watch !== null) { updLocChip(); checkNear(); } }, 5000);   // also catches the moment alerts switch on while parked
 function updLocChip() {
   const el = $("locChip"); if (!el) return;
   if (!HUNT.location || !navigator.geolocation || phase(state) !== "running") return el.classList.add("hidden");
